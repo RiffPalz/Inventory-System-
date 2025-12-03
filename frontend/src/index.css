@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: Lovelo;
+  src: url('/fonts/LoveloBlack.otf') format('opentype');
+}
+
+@font-face {
+  font-family: NunitoSans;
+  src: url('/fonts/NunitoSans.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: Roboto;
+  src: url('/fonts/Roboto.ttf') format('truetype');
+}
+
+@theme{
+  --font-NunitoSans: NunitoSans;
+  --font-Lovelo: Lovelo;
+  --font-Roboto: Roboto;
+}
+
+
