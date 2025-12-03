@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import 'dotenv/config';
 import {connectDB} from "./config/database.js";
+import path from "path";
+
 
 import adminRouter from './routes/adminRoute.js';
 import productRouter from './routes/productRoute.js';
@@ -15,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
-
+app.use("/uploads", express.static(path.join(process.cwd(), "public/uploads")));
 
 //Admin Routes
 app.use('/api/admin', adminRouter);

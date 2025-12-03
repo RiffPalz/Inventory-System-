@@ -1,4 +1,3 @@
-// routes/adminRoute.js
 import express from "express";
 import {
   loginAdmin,
@@ -14,7 +13,7 @@ adminRouter.post("/register", registerAdmin);
 adminRouter.post("/login", loginAdmin);
 adminRouter.post("/login/authentication", loginCode);
 
-// Protected routes — admin only
+// Protected route — admin only
 adminRouter.get("/profile", adminAuth, getAdminProfile);
 
 export default adminRouter;

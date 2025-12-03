@@ -2,6 +2,7 @@
 import express from "express";
 import adminAuth from "../middleware/adminauth.js";
 import ProductController from "../controllers/productController.js";
+import upload from "../middleware/upload.js"; 
 
 const productRouter = express.Router();
 
@@ -22,5 +23,12 @@ productRouter.put("/:id", ProductController.updateProduct);
 
 // Delete product by id
 productRouter.delete("/:id", ProductController.deleteProduct);
+
+// UPLOAD IMAGES - NEW
+productRouter.post(
+  "/:id/images",
+  upload.array("images", 10),
+  ProductController.uploadImages
+);
 
 export default productRouter;
