@@ -7,7 +7,8 @@ export const createAdminToken = (admin) => {
   }
 
   const payload = {
-    id: admin.id || admin._id,
+    // Check for ID (uppercase, from Sequelize instance) first, then fallback
+    id: admin.ID || admin.id || admin._id, 
     email: admin.emailAddress,
     role: "admin",
   };

@@ -1,100 +1,102 @@
-// components/Sidebar.jsx
-import { useState } from "react";
+// src/components/Sidebar.jsx
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import Logo from "../assets/images/logo.png";
 import {
   Home,
   Box,
   List,
-  ShoppingCart,
-  Users,
   ChevronLeft,
   ChartNoAxesCombined,
-  SquareChartGantt,
 } from "lucide-react";
 
 const menuItems = [
-  { label: "Dashboard", icon: Home },
-  { label: "Products", icon: Box },
-  { label: "Sales", icon: List },
-  { label: "Reports", icon: ChartNoAxesCombined }
+  { key: "dashboard", label: "Dashboard", icon: Home, path: "/dashboard" },
+  { key: "products", label: "Products", icon: Box, path: "/products" },
+  { key: "sales", label: "Sales", icon: List, path: "/sales" },
+  { key: "reports", label: "Reports", icon: ChartNoAxesCombined, path: "/reports" },
 ];
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
+  const [activeItem, setActiveItem] = useState("dashboard");
+
+  // derive active item from pathname so refresh/direct URLs work
+  useEffect(() => {
+    const path = location.pathname || "/";
+    // choose key based on path start
+    const found = menuItems.find((m) => path.startsWith(m.path));
+    setActiveItem(found ? found.key : "dashboard");
+  }, [location.pathname]);
 
   return (
     <div className="min-h-screen flex">
       <aside
-        className={`transition-all duration-300 ease-in-out rounded-2xl overflow-hidden m-4 shadow-lg  ${
-          collapsed ? "w-20" : "w-64"
-        }`}
+        className={`transition-all duration-300 ease-in-out rounded-2xl overflow-hidden m-4 shadow-xl sticky top-4 self-start ${collapsed ? "w-20" : "w-64"}`}
         style={{
-          background: "linear-gradient(180deg,#7c4dff,#7a5cff,#6b4bff)",
+          backgroundColor: "#6b4bff",
+          backgroundImage: "linear-gradient(180deg, #7c4dff 0%, #6b4bff 60%, #4a28c3 100%)",
+          minHeight: "calc(100vh - 2rem)",
         }}
       >
         <div className="h-full flex flex-col text-white">
-
-          {/* TOP: Logo + Title */}
-          <div className="flex items-center justify-center flex-col px-4 py-6">
+          <div className={`flex items-center justify-center flex-col px-4 ${collapsed ? "py-4" : "py-6"}`}>
             {collapsed ? (
               <div className="h-12 w-12 flex items-center justify-center overflow-hidden">
-                <img src={Logo} alt="Axis Tech Supplies" className="h-8 w-8 object-contain" />
+                <img src={Logo} alt="Logo" className="h-8 w-8 object-contain" />
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
                 <div className="h-16 w-16 flex items-center justify-center overflow-hidden">
-                  <img src={Logo} alt="Axis Tech Supplies" className="h-12 w-12 object-contain" />
+                  <img src={Logo} alt="Logo" className="h-12 w-12 object-contain" />
                 </div>
                 <div className="text-center px-2">
-                  <div className="text-xl font-Lovelo leading-tight">AXIS TECH SUPPLIES</div>
+                  <div className="text-xl font-Lovelo leading-tight font-bold">AXIS TECH SUPPLIES</div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* NAV */}
-          <nav className="flex-1 overflow-hidden mt-2">
-            <ul className="h-full overflow-auto py-2 flex flex-col items-start">
+          <nav className="overflow-hidden mt-2">
+            <ul className="py-2 flex flex-col items-start px-3">
               {menuItems.map((it) => {
                 const Icon = it.icon;
-                return (
-                  <li
-                    key={it.label}
-                    className={`w-full px-3 py-2 my-1 rounded-lg transition-colors ${
-                      collapsed
-                        ? "flex justify-center"
-                        : "flex items-center gap-4 justify-start pl-6 hover:bg-white/10"
-                    }`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={it.label}
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter" || e.key === " ") e.currentTarget.click();
-                    }}
-                  >
-                    {/* Icon container */}
-                    <div
-                      className={`flex items-center justify-center h-12 w-12 rounded-lg transition-all ${
-                        collapsed ? "mx-auto" : "bg-white/8 group-hover:bg-white/14"
-                      }`}
-                    >
-                      <Icon size={20} className="text-white" />
-                    </div>
+                const isActive = it.key === activeItem;
 
-                    {/* Label shown only when expanded */}
-                    {!collapsed && (
-                      <span className="text-sm font-medium text-white select-none">
-                        {it.label}
-                      </span>
-                    )}
+                return (
+                  <li key={it.key} className="w-full my-1 rounded-xl transition-all p-0">
+                    <Link
+                      to={it.path}
+                      onClick={() => setActiveItem(it.key)}
+                      className={`
+                        flex w-full px-3 py-2 rounded-xl transition-colors
+                        ${collapsed ? "justify-center" : "items-center gap-4 justify-start pl-6"}
+                        ${isActive ? "bg-white/20 text-white shadow-lg" : "hover:bg-white/10 text-white"}
+                      `}
+                      aria-current={isActive ? "page" : undefined}
+                    >
+                      <div
+                        className={`flex items-center justify-center h-10 w-10 rounded-lg transition-all ${
+                          collapsed ? "" : (isActive ? "bg-white/10" : "bg-white/8")
+                        }`}
+                      >
+                        <Icon size={20} className="text-white" />
+                      </div>
+
+                      {!collapsed && (
+                        <span className="text-sm font-medium text-white select-none whitespace-nowrap">
+                          {it.label}
+                        </span>
+                      )}
+                    </Link>
                   </li>
                 );
               })}
             </ul>
           </nav>
 
-          {/* FOOTER: collapse button */}
-          <div className="px-4 py-4 flex justify-center">
+          <div className="px-4 py-10 flex justify-center border-t border-white/10 mt-auto">
             <button
               onClick={() => setCollapsed((s) => !s)}
               className="h-12 w-12 rounded-full bg-white/12 hover:bg-white/20 flex items-center justify-center transition-colors"

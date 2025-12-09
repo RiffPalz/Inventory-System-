@@ -10,10 +10,24 @@ const Admin = sequelize.define(
       autoIncrement: true,
       allowNull: false,
     },
+    
+    images: { // Changed from 'image' to 'images' to match service logic
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: "Image URLs stored as a stringified array",
+    },
 
     userName: {
       type: DataTypes.STRING(255),
-      allowNull: false,
+      allowNull: true,
+    },
+
+    phoneNumber: {
+      type: DataTypes.CHAR(11),
+      allowNull: true,
+      validate: {
+        is: /^[0-9]{11}$/, // 11 digits only
+      },
     },
 
     emailAddress: {
