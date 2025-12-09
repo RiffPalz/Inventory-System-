@@ -39,27 +39,34 @@ export default function Login() {
         password,
       };
 
-      // Use adminApi login helper (axios). It should return { success, loginToken, message, ... }
+      // 1. Call the API helper
       const result = await loginAdminApi(payload);
 
       if (result?.success) {
+        // 2. Check for loginToken presence in the direct result or nested result.data
         const loginToken = result.loginToken ?? result.data?.loginToken;
+        
         if (!loginToken) {
           setError("Login succeeded but no login token was returned by the server.");
           return;
         }
+
+        // 3. Store the token and navigate to the OTP page
         localStorage.setItem("adminLoginToken", loginToken);
         navigate("/authentication");
       } else {
+        // Handle cases where the server returns { success: false } but no error was thrown
         setError(result?.message || "Login failed. Please try again.");
       }
     } catch (err) {
+      // FIX: Since adminApi.js throws a normalized object { message: '...' }, 
+      // we can simply check for err.message.
       console.error("Login error:", err);
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Cannot connect to server. Check your connection.";
+      
+      const msg = err.message || "An unexpected error occurred. Please try again.";
       setError(msg);
+      
+      
     } finally {
       setIsLoading(false);
     }
@@ -67,6 +74,7 @@ export default function Login() {
 
   return (
     <>
+      {/* ... (rest of your component rendering) ... */}
       {showModal && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"></div>}
 
       <div className="min-h-screen flex flex-col md:flex-row relative bg-[#f1f5f9]">

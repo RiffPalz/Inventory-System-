@@ -3,42 +3,52 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "../pages/Login.jsx";
 import OTP from "../components/OTP.jsx";
 import Dashboard from "../pages/Dashboard.jsx";
+import Products from "../pages/Products.jsx";
+import MyProfile from "../pages/MyProfile.jsx";
 import PrivateRoute from "../components/PrivateRoute.jsx";
 
-function LoginRedirect() {
-  const token = localStorage.getItem("token");
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
-  const isAuthenticated = !!token && user.role === "admin";
 
-  // If admin is logged in → go straight to dashboard
-  if (isAuthenticated){
-    switch (user.role) {
-      case "admin":
-        return <Navigate to="/dashboard" replace />;
-      default:
-       return <Login />;
-    } 
+function LoginRedirect() {
+  let user = {};
+  try {
+    user = JSON.parse(localStorage.getItem("user") || "{}");
+  } catch (err) {
+    user = {};
   }
 
-return <Login />;
+  const finalJwt = localStorage.getItem("token");
+  const tempLoginToken = localStorage.getItem("adminLoginToken");
+
+  const isAuthenticated = !!finalJwt && user.role === "admin";
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+
+  if (tempLoginToken) return <Navigate to="/authentication" replace />;
+
+  return <Login />;
 }
 
 export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+       
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
-        {/* Login OR redirect if admin already authenticated */}
-        <Route path="/" element={<LoginRedirect />} />
+       
+        <Route path="/login" element={<LoginRedirect />} />
 
-        {/* Public OTP route (must stay public) */}
-        <Route path="authentication" element={<OTP />} />
+      
+        <Route path="/authentication" element={<OTP />} />
 
-        {/* Protected admin routes */}
-        <Route element={<PrivateRoute allowedRole="admin" />}>
-          <Route path="dashboard" element={<Dashboard />} />
+    
+        <Route element={<PrivateRoute allowedRole="admin" />}> 
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/products" element={<Products />} />
+          <Route path="/myprofile" element={<MyProfile/>} />
         </Route>
 
+        {/* Fallback -> always go to login */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

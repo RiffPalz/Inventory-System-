@@ -1,17 +1,16 @@
-// controllers/adminAuthController.js
 import {loginAdminService, loginCodeVerifyService, registerAdminService,} from "../services/adminAuthService.js";
 import { validateEmail } from "../validators/adminValidator.js";
 
 
 export const registerAdmin = async (req, res) => {
   try {
-    const { emailAddress, password, userName } = req.body ?? {};
+    const { emailAddress, password} = req.body ?? {};
 
     // Basic required-field checks
-    if (!emailAddress || !password || !userName) {
+    if (!emailAddress || !password) {
       return res.status(400).json({
         success: false,
-        message: "emailAddress, password and userName are required.",
+        message: "EmailAddress and Password are required.",
       });
     }
 
@@ -29,15 +28,8 @@ export const registerAdmin = async (req, res) => {
       });
     }
 
-    // Basic username sanitization/length check
-    if (typeof userName !== "string" || userName.trim().length < 3) {
-      return res.status(400).json({
-        success: false,
-        message: "userName must be at least 3 characters.",
-      });
-    }
 
-    const result = await registerAdminService(cleanEmail, password, userName.trim());
+    const result = await registerAdminService(cleanEmail, password);
 
     // If service creates resource, 201 on success
     return res.status(result.success ? 201 : 400).json(result);
