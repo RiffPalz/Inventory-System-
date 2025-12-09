@@ -1,17 +1,21 @@
-import { DataTypes } from 'sequelize';
-import { sequelize } from '../config/database.js';
+// models/admin.js
+import { DataTypes } from "sequelize";
+import { sequelize } from "../config/database.js"; // adjust path if needed
 
 const Admin = sequelize.define(
-  'Admin',
+  "Admin",
   {
-    ID: {
+    // JS-friendly primary key 'id' mapped to DB column 'ID'
+    id: {
       type: DataTypes.BIGINT.UNSIGNED,
+      field: "ID",
       primaryKey: true,
       autoIncrement: true,
       allowNull: false,
     },
-    
-    images: { // Changed from 'image' to 'images' to match service logic
+
+    // images stored as JSON string in TEXT column
+    images: {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: "Image URLs stored as a stringified array",
@@ -22,16 +26,20 @@ const Admin = sequelize.define(
       allowNull: true,
     },
 
-    phoneNumber: {
+    // Keep DB column name phoneNumber but expose as 'phone' in JS
+    phone: {
       type: DataTypes.CHAR(11),
+      field: "phoneNumber",
       allowNull: true,
       validate: {
-        is: /^[0-9]{11}$/, // 11 digits only
+        is: /^[0-9]{11}$/,
       },
     },
 
-    emailAddress: {
+    // Keep DB column name emailAddress but expose as 'email' in JS
+    email: {
       type: DataTypes.STRING(255),
+      field: "emailAddress",
       allowNull: true,
       unique: true,
       validate: {
@@ -44,16 +52,6 @@ const Admin = sequelize.define(
       allowNull: false,
     },
 
-    createAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-
-    updateAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-
     verificationCode: {
       type: DataTypes.STRING(10),
       allowNull: true,
@@ -63,19 +61,24 @@ const Admin = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+
     loginToken: {
       type: DataTypes.STRING(255),
       allowNull: true,
     },
-    
+
     role: {
       type: DataTypes.STRING(10),
       allowNull: false,
+      defaultValue: "admin",
     },
   },
   {
-    tableName: 'admin',
-    timestamps: false,
+    tableName: "admin",
+    // map sequelize timestamps to your DB columns (createAt, updateAt)
+    timestamps: true,
+    createdAt: "createAt",
+    updatedAt: "updateAt",
   }
 );
 

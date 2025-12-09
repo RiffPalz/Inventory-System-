@@ -1,52 +1,56 @@
 import jwt from "jsonwebtoken";
+import Admin from "../models/admin.js"; 
 
-const adminAuth = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
+const adminAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (!authHeader) {
+      return res.status(401).json({ success: false, message: "Unauthorized: Missing header" });
+    }
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: Missing or malformed token.",
-      });
-    }
+    // Expect header like "Bearer eyJ..."
+    const parts = authHeader.split(" ");
+    if (parts.length !== 2 || parts[0] !== "Bearer") {
+      return res.status(401).json({ success: false, message: "Unauthorized: Invalid header format" });
+    }
 
-    const token = authHeader.split(" ")[1];
+    const token = parts[1];
 
-    const secret = process.env.JWT_SECRET_ADMIN;
-    if (!secret) {
-      console.error("❌ Missing JWT_SECRET_ADMIN in environment variables");
-      return res.status(500).json({
-        success: false,
-        message: "Server configuration error (missing JWT secret).",
-      });
-    }
+    // Verify token using the specific secret key used for signing
+    const secret = process.env.JWT_SECRET_ADMIN || process.env.JWT_SECRET || "changeme";
+    let payload;
+    try {
+      payload = jwt.verify(token, secret);
+    } catch (err) {
+      // token invalid or expired signature
+      return res.status(401).json({ success: false, message: "Unauthorized: Invalid token signature" });
+    }
 
-    const decoded = jwt.verify(token, secret);
+    // payload should contain the admin's ID (signed as 'id' in token.js)
+    const adminId = payload.id ?? payload.adminId ?? payload.userId ?? null;
+    if (!adminId) {
+      return res.status(401).json({ success: false, message: "Unauthorized: Token missing ID" });
+    }
 
-    // Ensure this token belongs to an admin
-    if (!decoded.role || decoded.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Forbidden: Admin access only.",
-      });
-    }
+    // fetch admin from DB using the ID found in the token
+    const admin = await Admin.findByPk(adminId);
+    if (!admin) {
+      return res.status(401).json({ success: false, message: "Unauthorized: Admin account not found" });
+    }
 
-    // Attach admin info to request
-    req.admin = {
-      id: decoded.id,      // use lowercase "id" consistently
-      email: decoded.email,
-      role: decoded.role,
-    };
+    // attach sanitized admin object to req for controller use
+    req.admin = {
+      id: admin.id,
+      userName: admin.userName,
+      email: admin.email,
+      role: admin.role,
+    };
 
-    next();
-  } catch (error) {
-    console.error("Auth Middleware Error:", error.message);
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired token. Please log in again.",
-    });
-  }
+    next();
+  } catch (err) {
+    console.error("adminAuth error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
 };
 
 export default adminAuth;

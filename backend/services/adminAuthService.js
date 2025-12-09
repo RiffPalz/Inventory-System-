@@ -16,46 +16,42 @@ export const registerAdminService = async (emailAddress, password) => {
       return { success: false, message: "All fields (Email and Password) are required." };
     }
 
-    // Input validation (optional, depending on where you handle it)
     const cleanEmail = typeof validateEmail === "function" ? validateEmail(emailAddress) : emailAddress.trim().toLowerCase();
     if (!cleanEmail) return { success: false, message: "Please provide a valid email address." };
 
-    // Check if admin already exists
-    const existingAdmin = await Admin.findOne({ where: { emailAddress: cleanEmail } });
+    // Check if admin already exists using the JS property 'email'
+    const existingAdmin = await Admin.findOne({ where: { email: cleanEmail } });
     if (existingAdmin) {
       return { success: false, message: "An admin with this email already exists." };
     }
 
-    // --- FIX: Provide a default userName from the email ---
-    // This is required because your Admin model has userName: { allowNull: false }
-    const defaultUserName = cleanEmail.split('@')[0];
+    // Provide a default userName from the email
+    const defaultUserName = cleanEmail.split('@')[0];
 
-    // 🔑 Hash the password
+    // Hash the password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 💾 Create and save the new admin
+    // Create and save the new admin
     const newAdmin = await Admin.create({
-        userName: defaultUserName, // <<< ADDED DEFAULT USERNAME
-        emailAddress: cleanEmail,
+        userName: defaultUserName, 
+        email: cleanEmail, // FIXED: Using 'email' (JS property)
         password: hashedPassword,
-        role: 'admin' // Default role as 'admin'
+        role: 'admin' 
     });
 
     if (!newAdmin) {
         return { success: false, message: "Failed to create admin account." };
     }
 
-    // Optionally generate a token or send a welcome email here
     return { 
         success: true, 
         message: "Admin account registered successfully.",
-        admin: { ID: newAdmin.ID, emailAddress: newAdmin.emailAddress } 
+        admin: { ID: newAdmin.ID, email: newAdmin.email } 
     };
 
   } catch (error) {
     console.error("registerAdminService error:", error);
-    // If the error is still a database constraint, you should check your admin.js model
     return { success: false, message: "Server error during admin registration." };
   }
 };
@@ -71,7 +67,7 @@ export const loginAdminService = async (emailAddress, password) => {
     const cleanEmail = typeof validateEmail === "function" ? validateEmail(emailAddress) : emailAddress.trim().toLowerCase();
     if (!cleanEmail) return { success: false, message: "Please provide a valid email address." };
 
-    // find admin by email (case-insensitive)
+    // find admin by email (case-insensitive) - Targets DB column 'emailAddress'
     const admin = await Admin.findOne({
       where: sequelize.where(fn("LOWER", col("emailAddress")), cleanEmail.toLowerCase()),
     });
@@ -105,7 +101,7 @@ export const loginAdminService = async (emailAddress, password) => {
     // send OTP email using your layout
     const html = typeof adminVerifyCode === "function" ? adminVerifyCode(code) : `<p>Your verification code is <b>${code}</b></p>`;
     await sendMail({ 
-        to: admin.emailAddress, 
+        to: admin.email, // FIXED: Using 'admin.email' (JS property)
         subject: "Login Verification Code", 
         html,
     });
@@ -150,7 +146,8 @@ export const loginCodeVerifyService = async (loginToken, code) => {
     await admin.update({ verificationCode: null, codeExpiresAt: null, loginToken: null });
 
     // Create permanent JWT
-    const token = createAdminToken({ ID: admin.ID, role: admin.role});
+    // 🔑 FIX: Pass the full 'admin' object so token.js can access admin.id and admin.email
+    const token = createAdminToken(admin); 
 
     return { success: true, message: "Login successful!", token };
   } catch (error) {

@@ -1,106 +1,87 @@
-import {loginAdminService, loginCodeVerifyService, registerAdminService,} from "../services/adminAuthService.js";
-import { validateEmail } from "../validators/adminValidator.js";
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import Admin from "../models/admin.js"; 
+import { 
+  loginAdminService, 
+  loginCodeVerifyService, 
+  registerAdminService 
+} from "../services/adminAuthService.js";
+
+
+const signToken = (payload) => {
+  const secret = process.env.JWT_SECRET || process.env.SECRET || "changeme";
+  const expiresIn = process.env.JWT_EXPIRES_IN || "7d";
+  return jwt.sign(payload, secret, { expiresIn });
+};
+
+export const loginAdmin = async (req, res) => {
+  try {
+    const emailAddress = req.body?.email ?? req.body?.emailAddress ?? req.body?.Email ?? null;
+    const password = req.body?.password ?? req.body?.pass ?? null;
+
+    const result = await loginAdminService(emailAddress, password);
+    
+    if (!result.success) {
+      const status = (result.message.includes("required")) ? 400 : 401;
+      return res.status(status).json(result);
+    }
+    
+    return res.json({
+      success: true,
+      message: result.message,
+      data: { loginToken: result.loginToken },
+    });
+
+  } catch (err) {
+    console.error("loginAdmin error:", err);
+    return res.status(500).json({ success: false, message: "Server error during login." });
+  }
+};
+
+
+export const loginCode = async (req, res) => {
+  try {
+    const { loginToken, code } = req.body;
+
+    const result = await loginCodeVerifyService(loginToken, code);
+
+    if (!result.success) {
+      const status = (result.codeExpired) ? 401 : 400;
+      return res.status(status).json(result);
+    }
+
+    return res.json({
+      success: true,
+      message: result.message,
+      data: { token: result.token },
+    });
+
+  } catch (err) {
+    console.error("loginCode error:", err);
+    return res.status(500).json({ success: false, message: "Server error during verification." });
+  }
+};
 
 
 export const registerAdmin = async (req, res) => {
   try {
-    const { emailAddress, password} = req.body ?? {};
+    const emailAddress = req.body?.email ?? req.body?.emailAddress;
+    const password = req.body?.password;
 
-    // Basic required-field checks
-    if (!emailAddress || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "EmailAddress and Password are required.",
-      });
+    const result = await registerAdminService(emailAddress, password);
+
+    if (!result.success) {
+      const status = (result.message.includes("required")) ? 400 : 409; 
+      return res.status(status).json(result);
     }
 
-    // Validate email format (validator should return cleaned email or falsy)
-    const cleanEmail = validateEmail(emailAddress);
-    if (!cleanEmail) {
-      return res.status(400).json({ success: false, message: "Invalid email format." });
-    }
+    return res.status(201).json(result); 
 
-    // Basic password policy (adjust to your needs)
-    if (typeof password !== "string" || password.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be at least 8 characters long.",
-      });
-    }
-
-
-    const result = await registerAdminService(cleanEmail, password);
-
-    // If service creates resource, 201 on success
-    return res.status(result.success ? 201 : 400).json(result);
-  } catch (error) {
-    console.error("registerAdmin controller error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+  } catch (err) {
+    console.error("registerAdmin error:", err);
+    return res.status(500).json({ success: false, message: "Server error during registration." });
   }
 };
 
-/**
- * POST /admin/login
- */
-export const loginAdmin = async (req, res) => {
-  try {
-    const { emailAddress: rawEmail, password } = req.body ?? {};
 
-    if (!rawEmail || !password) {
-      return res.status(400).json({ success: false, message: "Email and password are required." });
-    }
-
-    const cleanEmail = validateEmail(rawEmail);
-    if (!cleanEmail) {
-      return res.status(400).json({ success: false, message: "Invalid email format." });
-    }
-
-    const result = await loginAdminService(cleanEmail, password);
-
-    // On auth failure service should return { success: false, message: "..." }
-    // We return 200 for success, 401 for authentication failure
-    return res.status(result.success ? 200 : 401).json(result);
-  } catch (error) {
-    console.error("loginAdmin controller error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
-  }
-};
-
-export const loginCode = async (req, res) => {
-  try {
-    const { loginToken, code } = req.body ?? {};
-
-    if (!loginToken || !code) {
-      return res.status(400).json({ success: false, message: "loginToken and code are required." });
-    }
-
-    const result = await loginCodeVerifyService(loginToken, code);
-
-    return res.status(result.success ? 200 : 401).json(result);
-  } catch (error) {
-    console.error("loginCode controller error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
-  }
-};
-
-export const getAdminProfile = async (req, res) => {
-  try {
-    // If you used the adminAuth middleware from earlier, req.admin should exist
-    const admin = req.admin ?? req.user ?? null;
-    if (!admin) {
-      return res.status(401).json({ success: false, message: "Unauthorized." });
-    }
-
-    // Option A: simply return the decoded token data
-    return res.status(200).json({ success: true, data: admin });
-
-    // Option B (recommended): fetch fresh admin data from DB using admin.id
-    // const fullAdmin = await adminService.getById(admin.id);
-    // return res.status(200).json({ success: true, data: fullAdmin });
-  } catch (error) {
-    console.error("getAdminProfile controller error:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
-  }
-};
-
-export default { registerAdmin, loginAdmin, loginCode, getAdminProfile };
+export default { loginAdmin, loginCode, registerAdmin };
