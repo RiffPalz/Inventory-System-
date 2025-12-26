@@ -1,11 +1,9 @@
-// models/admin.js
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js"; // adjust path if needed
 
 const Admin = sequelize.define(
   "Admin",
   {
-    // JS-friendly primary key 'id' mapped to DB column 'ID'
     id: {
       type: DataTypes.BIGINT.UNSIGNED,
       field: "ID",
@@ -26,8 +24,7 @@ const Admin = sequelize.define(
       allowNull: true,
     },
 
-    // Keep DB column name phoneNumber but expose as 'phone' in JS
-    phone: {
+    phoneNumber: {
       type: DataTypes.CHAR(11),
       field: "phoneNumber",
       allowNull: true,
@@ -36,8 +33,7 @@ const Admin = sequelize.define(
       },
     },
 
-    // Keep DB column name emailAddress but expose as 'email' in JS
-    email: {
+    emailAddress: {
       type: DataTypes.STRING(255),
       field: "emailAddress",
       allowNull: true,
@@ -50,16 +46,6 @@ const Admin = sequelize.define(
     password: {
       type: DataTypes.TEXT,
       allowNull: false,
-    },
-
-    verificationCode: {
-      type: DataTypes.STRING(10),
-      allowNull: true,
-    },
-
-    codeExpiresAt: {
-      type: DataTypes.DATE,
-      allowNull: true,
     },
 
     loginToken: {
@@ -75,7 +61,6 @@ const Admin = sequelize.define(
   },
   {
     tableName: "admin",
-    // map sequelize timestamps to your DB columns (createAt, updateAt)
     timestamps: true,
     createdAt: "createAt",
     updatedAt: "updateAt",

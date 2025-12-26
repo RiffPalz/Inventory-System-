@@ -2,17 +2,17 @@ import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
 const setStockStatus = (product) => {
-  const stock = Number(product.stock) || 0;
-  product.inStock = stock > 0;
+  const storeStock = Number(product.inStock) || 0;
 
-  if (stock <= 0) {
+  if (storeStock <= 0) {
     product.status = "out of stock";
-  } else if (stock <= 10) {
+  } else if (storeStock <= 10) {
     product.status = "low stock";
   } else {
     product.status = "in stock";
   }
 };
+
 
 const Product = sequelize.define(
   "Product",
@@ -24,7 +24,7 @@ const Product = sequelize.define(
       allowNull: false,
     },
 
-    images: { // Changed from 'image' to 'images' to match service logic
+    images: {
       type: DataTypes.TEXT,
       allowNull: true,
       comment: "Image URLs stored as a stringified array",
@@ -57,18 +57,20 @@ const Product = sequelize.define(
       allowNull: false,
     },
 
+    // Warehouse stock (where you store inventory)
     stock: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
       defaultValue: 0,
-      comment: "Total quantity available",
+      comment: "Warehouse stock",
     },
 
+    // Store stock (how many items currently in store / available for sale)
     inStock: {
-      type: DataTypes.BOOLEAN,
+      type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
-      defaultValue: true,
-      comment: "Automatically switches false when stock is 0",
+      defaultValue: 0,
+      comment: "Store stock (quantity available in store)",
     },
 
     price: {
@@ -87,10 +89,11 @@ const Product = sequelize.define(
     tableName: "products",
     timestamps: true,
     hooks: {
-      beforeCreate: (product) => setStockStatus(product),
-      beforeUpdate: (product) => setStockStatus(product),
-      beforeSave: (product) => setStockStatus(product),
-    },
+      beforeSave: (product) => {
+        if (product.changed("inStock")) setStockStatus(product);
+      }
+    }
+
   }
 );
 

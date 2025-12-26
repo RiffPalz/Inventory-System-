@@ -1,34 +1,40 @@
-// routes/productRoute.js
+// routes/productRoutes.js
 import express from "express";
-import adminAuth from "../middleware/adminauth.js";
-import ProductController from "../controllers/productController.js";
-import upload from "../middleware/upload.js"; 
+import {
+  createProductController,
+  getProductController,
+  listProductsController,
+  updateProductController,
+  deleteProductController,
+} from "../controllers/productController.js";
+import { verifyToken } from "../middleware/adminauth.js";
+import { upload } from "../middleware/upload.js";
 
-const productRouter = express.Router();
+const router = express.Router();
 
-// Protect all product routes with adminAuth
-productRouter.use(adminAuth);
+// Helper middleware: only run multer when request is multipart/form-data.
+// If request is JSON (application/json) we skip multer so req.body stays populated.
+const optionalUploadSingle = (fieldName = "image") => (req, res, next) => {
+  const contentType = req.headers["content-type"] || "";
+  if (req.is && req.is("application/json")) return next();
+  if (contentType.startsWith("multipart/form-data")) {
+    return upload.single(fieldName)(req, res, next);
+  }
+  // If content-type absent or something else (e.g. text/plain), just continue
+  return next();
+};
 
-// Create product
-productRouter.post("/", ProductController.createProduct);
+// Create product — accepts JSON or form-data (with optional single image field "image")
+router.post("/", verifyToken, optionalUploadSingle("image"), createProductController);
 
-// List products (supports pagination, search, filters)
-productRouter.get("/", ProductController.listProducts);
+// Public list & get
+router.get("/", listProductsController);
+router.get("/:id", getProductController);
 
-// Get single product by id
-productRouter.get("/:id", ProductController.getProductById);
+// Update product — accepts JSON or form-data (with optional single image field "image")
+router.put("/:id", verifyToken, optionalUploadSingle("image"), updateProductController);
 
-// Update product by id
-productRouter.put("/:id", ProductController.updateProduct);
+// Delete
+router.delete("/:id", verifyToken, deleteProductController);
 
-// Delete product by id
-productRouter.delete("/:id", ProductController.deleteProduct);
-
-// UPLOAD IMAGES - NEW
-productRouter.post(
-  "/:id/images",
-  upload.array("images", 10),
-  ProductController.uploadImages
-);
-
-export default productRouter;
+export default router;

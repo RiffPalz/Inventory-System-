@@ -1,50 +1,84 @@
-// src/api/adminApi.js
-import api from "./axiosSetup";
+import axios from "axios";
 
-// Admin login (first step) -> returns { success, loginToken, message, ... }
+const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+
+const api = axios.create({
+  baseURL: backendUrl,
+  headers: { "Content-Type": "application/json" },
+});
+
+// Request interceptor: attach Authorization header using adminAccessToken if present
+api.interceptors.request.use(
+  (config) => {
+    try {
+      const token = localStorage.getItem("adminAccessToken");
+      if (token) {
+        config.headers = config.headers || {};
+        if (!config.headers.Authorization && !config.headers.authorization) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+      }
+    } catch (e) {
+      // ignore localStorage errors
+      // console.warn("adminApi interceptor error:", e);
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Helper to normalize errors
+const normalizeError = (err) => {
+  if (!err) return { message: "Unknown error" };
+  if (err.response && err.response.data) {
+    const d = err.response.data;
+    return { message: d.message || d.error || JSON.stringify(d) };
+  }
+  return { message: err.message || "Network error" };
+};
+
+// Login (no OTP) -> returns { success, admin, accessToken, refreshToken, raw }
 export const loginAdmin = async (credentials) => {
   try {
-    const response = await api.post("/admin/login", credentials);
-    return response.data;
-  } catch (error) {
-    console.error("Admin login error:", error);
-    // normalize thrown error so frontend catch can show friendly message
-    throw error.response?.data || { message: error.message || "Login failed" };
+    const res = await api.post("/api/admin/login", credentials);
+    const data = res.data || {};
+
+    return {
+      success: true,
+      admin: data.admin ?? null,
+      accessToken: data.accessToken ?? data.token ?? null,
+      refreshToken: data.refreshToken ?? null,
+      raw: data,
+    };
+  } catch (err) {
+    throw normalizeError(err);
   }
 };
 
-// Verify login code (OTP) -> expects { loginToken, code } and returns { success, token, message, user? }
-export const verifyLoginCode = async (payload) => {
-  try {
-    const response = await api.post("/admin/login/authentication", payload);
-    return response.data;
-  } catch (error) {
-    console.error("Verify login code error:", error);
-    throw error.response?.data || { message: error.message || "Verification failed" };
-  }
-};
-
-// Get Admin Profile (protected)
+// Fetch admin profile (protected)
 export const fetchAdminProfile = async () => {
   try {
-    const token = localStorage.getItem("token");
-    if (!token) throw { message: "No token found" };
-
-    const response = await api.get("/admin/profile", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error("Fetch admin profile error:", error);
-    throw error.response?.data || { message: error.message || "Failed to fetch admin profile" };
+    const res = await api.get("/api/admin/me");
+    // return whatever backend returns (controller returns { admin })
+    return res.data;
+  } catch (err) {
+    throw normalizeError(err);
   }
+};
+
+// Optional helper to set tokens programmatically
+export const setAccessToken = (token) => {
+  if (token) localStorage.setItem("adminAccessToken", token);
+  else localStorage.removeItem("adminAccessToken");
+};
+export const setRefreshToken = (token) => {
+  if (token) localStorage.setItem("adminRefreshToken", token);
+  else localStorage.removeItem("adminRefreshToken");
 };
 
 export default {
   loginAdmin,
-  verifyLoginCode,
   fetchAdminProfile,
+  setAccessToken,
+  setRefreshToken,
 };

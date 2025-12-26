@@ -11,35 +11,6 @@ import {
   BarChart2,
 } from "lucide-react";
 
-// ======= CARD DATA =========
-const topCards = [
-  {
-    label: "TOTAL STOCK ITEMS",
-    value: "1",
-    icon: <Package className="w-6 h-6 text-sky-500" />,
-    bgColor: "bg-sky-50",
-  },
-  {
-    label: "LOW STOCK ALERTS",
-    value: "0",
-    icon: <AlertTriangle className="w-6 h-6 text-red-500" />,
-    bgColor: "bg-red-50",
-  },
-  {
-    label: "TOTAL SALES (30 DAYS)",
-    value: "$0.00",
-    icon: <DollarSign className="w-6 h-6 text-green-500" />,
-    bgColor: "bg-green-50",
-  },
-  {
-    label: "UNITS SOLD (30 DAYS)",
-    value: "0",
-    icon: <BarChart2 className="w-6 h-6 text-purple-500" />,
-    bgColor: "bg-purple-50",
-  },
-];
-
-// Small reusable item component (no Navigate wrapper — it was wrong)
 const ProfileMenuItem = ({ icon, text, onClick }) => (
   <button
     onClick={onClick}
@@ -56,9 +27,14 @@ export default function Dashboard() {
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
 
-  // Close dropdown on outside click or Esc
+  const [totalStockItems, setTotalStockItems] = useState("");
+  const [lowStockAlerts, setLowStockAlerts] = useState("");
+  const [totalSales30d, setTotalSales30d] = useState(0);
+  const [unitsSold30d, setUnitsSold30d] = useState("");
+  const [recentSales, setRecentSales] = useState([]);
+
   useEffect(() => {
-    function handleClick(e) {
+    const close = (e) => {
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(e.target) &&
@@ -66,47 +42,71 @@ export default function Dashboard() {
       ) {
         setProfileOpen(false);
       }
-    }
-    function handleKey(e) {
-      if (e.key === "Escape") setProfileOpen(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKey);
+    };
+    const esc = (e) => e.key === "Escape" && setProfileOpen(false);
+
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
     return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKey);
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
     };
   }, []);
 
-  // Navigate to the MyProfile page
   const handleProfilePage = () => {
     setProfileOpen(false);
     navigate("/myprofile");
   };
 
-  // Clear auth and go to login
   const handleSignout = () => {
-    // Clear tokens/user stored in localStorage
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("adminLoginToken");
-    // You might also clear other app-specific keys
-
-    setProfileOpen(false);
+    localStorage.removeItem("adminAccessToken");
+    localStorage.removeItem("adminRefreshToken");
+    localStorage.removeItem("adminProfile");
     navigate("/login");
   };
 
-  const handleNotificationClick = () => {
-    console.log("Notification icon clicked!");
-    // TODO: implement notification panel
-  };
+  const topCards = [
+    {
+      label: "TOTAL STOCK ITEMS",
+      value:
+        totalStockItems === "" || totalStockItems === null
+          ? 0
+          : totalStockItems,
+      icon: <Package className="w-6 h-6 text-sky-500" />,
+      bgColor: "bg-sky-50",
+    },
+    {
+      label: "LOW STOCK ALERTS",
+      value:
+        lowStockAlerts === "" || lowStockAlerts === null ? 0 : lowStockAlerts,
+      icon: <AlertTriangle className="w-6 h-6 text-red-500" />,
+      bgColor: "bg-red-50",
+    },
+    {
+      label: "TOTAL SALES (30 DAYS)",
+      value:
+        totalSales30d === "" || totalSales30d === null
+          ? "₱0.00"
+          : `₱${Number(totalSales30d).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`,
+      icon: <DollarSign className="w-6 h-6 text-green-500" />,
+      bgColor: "bg-green-50",
+    },
+    {
+      label: "UNITS SOLD (30 DAYS)",
+      value: unitsSold30d === "" || unitsSold30d === null ? 0 : unitsSold30d,
+      icon: <BarChart2 className="w-6 h-6 text-purple-500" />,
+      bgColor: "bg-purple-50",
+    },
+  ];
 
   return (
     <div className="flex min-h-screen bg-gray-100">
       <Sidebar />
 
       <div className="flex-1 p-8 space-y-8">
-        {/* TOP BAR */}
         <div className="flex items-center justify-between border-b pb-6">
           <h1 className="text-3xl font-Roboto font-bold text-[#4f46e5]">
             Welcome, Admin!
@@ -114,9 +114,8 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-4">
             <button
-              onClick={handleNotificationClick}
-              className="p-2 rounded-full hover:bg-slate-200 text-slate-600 transition duration-150"
-              aria-label="Notifications"
+              onClick={() => console.log("Notifications")}
+              className="p-2 rounded-full hover:bg-slate-200 text-slate-600"
             >
               <Bell className="w-6 h-6" />
             </button>
@@ -125,9 +124,7 @@ export default function Dashboard() {
               <button
                 id="profile-button"
                 onClick={() => setProfileOpen((s) => !s)}
-                className="flex items-center gap-3 focus:outline-none p-1 rounded-full hover:bg-slate-200 transition duration-150"
-                aria-haspopup="true"
-                aria-expanded={profileOpen}
+                className="flex items-center gap-3 p-1 rounded-full hover:bg-slate-200"
               >
                 <div className="w-10 h-10 rounded-full ring-2 ring-gray-300 flex items-center justify-center bg-white overflow-hidden">
                   <div className="h-9 w-9 rounded-full bg-gray-200 flex items-center justify-center text-md font-semibold text-slate-700">
@@ -180,7 +177,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* TOP CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {topCards.map((card) => (
             <div
@@ -197,13 +193,14 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className={`p-3 rounded-full ${card.bgColor}`}>{card.icon}</div>
+                <div className={`p-3 rounded-full ${card.bgColor}`}>
+                  {card.icon}
+                </div>
               </div>
             </div>
           ))}
         </div>
 
-        {/* MORE CONTENT */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white p-6 rounded-xl shadow-lg border border-red-200">
             <h3 className="text-lg font-semibold text-red-600 flex items-center gap-2 mb-2">
@@ -228,23 +225,32 @@ export default function Dashboard() {
               >
                 <circle cx="12" cy="12" r="10"></circle>
                 <polyline points="12 6 12 12 16 14"></polyline>
-              </svg>{" "}
+              </svg>
               Recent Sales
             </h3>
-            <ul className="space-y-3">
-              <li className="flex justify-between items-center text-sm text-slate-600">
-                <span>Product A</span>
-                <span className="font-medium text-slate-800">
-                  1200 units ($14774400.00)
-                </span>
-              </li>
-              <li className="flex justify-between items-center text-sm text-slate-600">
-                <span>Product B</span>
-                <span className="font-medium text-slate-800">
-                  25 units ($3078000.00)
-                </span>
-              </li>
-            </ul>
+
+            {recentSales.length === 0 ? (
+              <div className="text-sm text-slate-600">No recent sales</div>
+            ) : (
+              <ul className="space-y-3">
+                {recentSales.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex justify-between items-center text-sm text-slate-600"
+                  >
+                    <span>{item.productName}</span>
+                    <span className="font-medium text-slate-800">
+                      {item.quantity} units (₱
+                      {Number(item.totalPrice).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                      )
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>

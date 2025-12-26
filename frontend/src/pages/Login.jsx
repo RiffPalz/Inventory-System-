@@ -1,12 +1,10 @@
-// src/pages/Login.jsx
 import { useRef, useState } from "react";
 import { FaEye, FaEyeSlash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { loginAdmin as loginAdminApi } from "../api/adminApi.js";
+import adminApi from "../api/adminApi.js";
 
 import gradient from "../assets/images/gradient.png";
 import Logo from "../assets/images/logo.png";
-
 
 export default function Login() {
   const formRef = useRef(null);
@@ -39,34 +37,30 @@ export default function Login() {
         password,
       };
 
-      // 1. Call the API helper
-      const result = await loginAdminApi(payload);
+      const result = await adminApi.loginAdmin(payload);
 
       if (result?.success) {
-        // 2. Check for loginToken presence in the direct result or nested result.data
-        const loginToken = result.loginToken ?? result.data?.loginToken;
-        
-        if (!loginToken) {
-          setError("Login succeeded but no login token was returned by the server.");
+        const accessToken = result.accessToken ?? result.raw?.accessToken ?? result.raw?.token ?? null;
+        const refreshToken = result.refreshToken ?? result.raw?.refreshToken ?? null;
+
+        if (!accessToken) {
+          setError("Login succeeded but no access token was returned by the server.");
           return;
         }
 
-        // 3. Store the token and navigate to the OTP page
-        localStorage.setItem("adminLoginToken", loginToken);
-        navigate("/authentication");
+        // Persist tokens & profile
+        localStorage.setItem("adminAccessToken", accessToken);
+        if (refreshToken) localStorage.setItem("adminRefreshToken", refreshToken);
+        if (result.admin) localStorage.setItem("adminProfile", JSON.stringify(result.admin));
+
+        // Redirect to dashboard
+        navigate("/dashboard");
       } else {
-        // Handle cases where the server returns { success: false } but no error was thrown
         setError(result?.message || "Login failed. Please try again.");
       }
     } catch (err) {
-      // FIX: Since adminApi.js throws a normalized object { message: '...' }, 
-      // we can simply check for err.message.
       console.error("Login error:", err);
-      
-      const msg = err.message || "An unexpected error occurred. Please try again.";
-      setError(msg);
-      
-      
+      setError(err.message || "An unexpected error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +68,6 @@ export default function Login() {
 
   return (
     <>
-      {/* ... (rest of your component rendering) ... */}
       {showModal && <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30"></div>}
 
       <div className="min-h-screen flex flex-col md:flex-row relative bg-[#f1f5f9]">
