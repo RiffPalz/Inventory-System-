@@ -56,12 +56,9 @@ const ENDPOINT = "/api/products";
  * ===============================
  */
 
-// PUBLIC
+// PUBLIC - No auth required
 export const listProducts = (opts) =>
-  api.get(ENDPOINT, { 
-    params: opts,
-    headers: getAuthHeaders() // Add this line to ensure the token is sent
-  });
+  api.get(ENDPOINT, { params: opts });
 
 // CREATE (Protected, multipart-safe)
 export const createProduct = (item, imageFile) => {

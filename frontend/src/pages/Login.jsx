@@ -39,8 +39,7 @@ export default function Login() {
 
       const result = await adminApi.loginAdmin(payload);
 
-      if (result?.success) {
-        // Handle different possible token key names from backend
+      if (result?.accessToken || result?.token || result?.raw?.accessToken) {
         const accessToken =
           result.accessToken ??
           result.raw?.accessToken ??
@@ -56,13 +55,13 @@ export default function Login() {
 
         // 1. Persist tokens for AppRouter & PrivateRoute
         localStorage.setItem("token", accessToken);
+        localStorage.setItem("adminAccessToken", accessToken); // Standardize for AppRouter
         if (refreshToken)
           localStorage.setItem("adminRefreshToken", refreshToken);
 
         // 2. Persist Profile for Navbar/Sidebar Display
         if (result.admin) {
           const profileData = {
-            // Mapping to ensure we catch 'admin' or 'userName' from your database
             username: result.admin.userName || result.admin.admin || "Admin",
             email: result.admin.emailAddress || email,
             avatar: result.admin.images?.[0] || null,
@@ -79,7 +78,7 @@ export default function Login() {
     } catch (err) {
       console.error("Login error:", err);
       setError(
-        err.message || "An unexpected error occurred. Please try again."
+        err.response?.data?.message || err.message || "An unexpected error occurred. Please try again."
       );
     } finally {
       setIsLoading(false);
@@ -189,11 +188,10 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`w-full rounded-xl bg-[#4f46e5] text-white py-4 font-bold shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] mt-4 uppercase text-sm tracking-widest ${
-                  isLoading
+                className={`w-full rounded-xl bg-[#4f46e5] text-white py-4 font-bold shadow-lg shadow-indigo-100 transition-all active:scale-[0.98] mt-4 uppercase text-sm tracking-widest ${isLoading
                     ? "opacity-70 cursor-not-allowed"
                     : "hover:bg-[#3c3acb] hover:shadow-indigo-200"
-                }`}
+                  }`}
               >
                 {isLoading ? "Verifying..." : "Sign In to System"}
               </button>
