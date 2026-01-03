@@ -3,32 +3,29 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 export default function PrivateRoute({ allowedRole = "admin" }) {
   const location = useLocation();
 
-  // Safe parse in case localStorage contains invalid JSON
-  let user = {};
+  // Try preferred keys first (adminProfile / adminAccessToken).
+  // Keep fallbacks for backward compatibility (user / token).
+  let profile = null;
   try {
-    if (typeof window !== "undefined") {
-      user = JSON.parse(localStorage.getItem("user") || "{}");
-    }
+    const raw = localStorage.getItem("adminProfile") ?? localStorage.getItem("user");
+    profile = raw ? JSON.parse(raw) : null;
   } catch (err) {
-    console.error("Failed to parse stored user:", err);
-    user = {};
+    console.error("PrivateRoute: failed to parse stored profile:", err);
+    profile = null;
   }
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const token = localStorage.getItem("adminAccessToken") || localStorage.getItem("token") || null;
 
-  const isAuthenticated = !!token && !!user?.role;
-  const isAllowed = !allowedRole ? true : user?.role === allowedRole;
+  const isAuthenticated = !!token && !!profile?.role;
+  const isAllowed = !allowedRole ? true : profile?.role === allowedRole;
 
-  // If not logged in → must go to the public login page: /login
   if (!isAuthenticated) {
-    // Pass the current location via 'state' so the user can be redirected 
-    // back here after successful login.
+    // Not logged in → redirect to login. Keep the location so login can redirect back.
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Authenticated but not allowed role → redirect to login (or you can redirect to a "403" page)
   if (!isAllowed) {
-    // You could also redirect to a 403 Forbidden page here.
+    // Authenticated but role not allowed → redirect to login or show 403 later.
     return <Navigate to="/login" replace />;
   }
 

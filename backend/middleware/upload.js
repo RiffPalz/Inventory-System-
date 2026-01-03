@@ -1,43 +1,37 @@
-// middleware/upload.js
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 
-// Create upload directory if not exists
-const uploadDir = "public/uploads";
+// ensure uploads folder exists
+import fs from "fs";
+const uploadDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+    fs.mkdirSync(uploadDir);
 }
 
-// Storage config
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, uploadDir);
+        cb(null, "uploads/");
     },
     filename: (req, file, cb) => {
-        const uniqueName = Date.now() + "-" + file.originalname.replace(/\s+/g, "_");
-        cb(null, uniqueName);
-    }
+        const ext = file.originalname.split(".").pop();
+        cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`);
+    },
 });
 
-// Allowed file types
+// OPTIONAL: restrict to images only
 const fileFilter = (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|webp/;
-    const ext = path.extname(file.originalname).toLowerCase();
-    const mime = file.mimetype;
-
-    if (allowed.test(ext) && allowed.test(mime)) {
-        cb(null, true);
-    } else {
-        cb(new Error("Only images (jpg, jpeg, png, webp) are allowed"));
-    }
+    const allowed = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image uploads are allowed"), false);
 };
 
-// Multer config
-const upload = multer({
-    storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit per file
-    fileFilter
-});
+// OPTIONAL: size limit (3 MB)
+const limits = {
+    fileSize: 3 * 1024 * 1024, // 3MB
+};
 
-export default upload;
+export const upload = multer({
+    storage,
+    fileFilter,
+    limits,
+});

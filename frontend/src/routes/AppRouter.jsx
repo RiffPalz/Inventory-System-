@@ -1,29 +1,27 @@
-// src/router/AppRouter.jsx
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "../pages/Login.jsx";
-import OTP from "../components/OTP.jsx";
 import Dashboard from "../pages/Dashboard.jsx";
 import Products from "../pages/Products.jsx";
+import Stocks from "../pages/Stocks.jsx";
+import Sales from "../pages/Sales.jsx";
+import Reports from "../pages/Reports.jsx";
+import MonthlySales from "../pages/MonthlySales.jsx";
+import MonthlySold from "../pages/MonthlySold.jsx";
 import MyProfile from "../pages/MyProfile.jsx";
 import PrivateRoute from "../components/PrivateRoute.jsx";
-
+import MainLayout from "../components/MainLayout.jsx"; 
 
 function LoginRedirect() {
-  let user = {};
+  let profile = null;
   try {
-    user = JSON.parse(localStorage.getItem("user") || "{}");
+    profile = JSON.parse(localStorage.getItem("adminProfile") || "null");
   } catch (err) {
-    user = {};
+    profile = null;
   }
+  const accessToken = localStorage.getItem("adminAccessToken");
+  const isAuthenticated = !!accessToken && (profile?.role === "admin" || profile?.role === "superadmin");
 
-  const finalJwt = localStorage.getItem("token");
-  const tempLoginToken = localStorage.getItem("adminLoginToken");
-
-  const isAuthenticated = !!finalJwt && user.role === "admin";
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
-
-  if (tempLoginToken) return <Navigate to="/authentication" replace />;
-
   return <Login />;
 }
 
@@ -31,23 +29,24 @@ export default function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-       
         <Route path="/" element={<Navigate to="/login" replace />} />
-
-       
         <Route path="/login" element={<LoginRedirect />} />
 
-      
-        <Route path="/authentication" element={<OTP />} />
-
-    
-        <Route element={<PrivateRoute allowedRole="admin" />}> 
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/myprofile" element={<MyProfile/>} />
+        {/* 1. First, check if user is logged in */}
+        <Route element={<PrivateRoute allowedRole="admin" />}>
+          {/* 2. Then, wrap all these pages in the MainLayout (Sidebar + Header) */}
+          <Route element={<MainLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/stocks" element={<Stocks />} />
+            <Route path="/sales" element={<Sales />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/reports/monthly-sales" element={<MonthlySales />} />
+            <Route path="/reports/monthly-sold" element={<MonthlySold />} />
+            <Route path="/myprofile" element={<MyProfile />} />
+          </Route>
         </Route>
 
-        {/* Fallback -> always go to login */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

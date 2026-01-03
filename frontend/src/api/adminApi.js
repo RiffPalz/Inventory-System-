@@ -1,50 +1,68 @@
-// src/api/adminApi.js
-import api from "./axiosSetup";
+import axios from "axios";
 
-// Admin login (first step) -> returns { success, loginToken, message, ... }
-export const loginAdmin = async (credentials) => {
-  try {
-    const response = await api.post("/admin/login", credentials);
-    return response.data;
-  } catch (error) {
-    console.error("Admin login error:", error);
-    // normalize thrown error so frontend catch can show friendly message
-    throw error.response?.data || { message: error.message || "Login failed" };
-  }
-};
+/**
+ * Backend base URL
+ */
+const BACKEND =
+  import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
-// Verify login code (OTP) -> expects { loginToken, code } and returns { success, token, message, user? }
-export const verifyLoginCode = async (payload) => {
-  try {
-    const response = await api.post("/admin/login/authentication", payload);
-    return response.data;
-  } catch (error) {
-    console.error("Verify login code error:", error);
-    throw error.response?.data || { message: error.message || "Verification failed" };
-  }
-};
+/**
+ * Axios instance
+ */
+const api = axios.create({
+  baseURL: `${BACKEND}/api/admin`,
+  withCredentials: false,
+});
 
-// Get Admin Profile (protected)
-export const fetchAdminProfile = async () => {
-  try {
+/**
+ * Attach JWT automatically to every request
+ * Uses ONE standard key: "token"
+ */
+api.interceptors.request.use(
+  (config) => {
     const token = localStorage.getItem("token");
-    if (!token) throw { message: "No token found" };
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-    const response = await api.get("/admin/profile", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+/**
+ * Normalize API responses
+ */
+const unwrap = (res) => res?.data ?? res;
 
-    return response.data;
-  } catch (error) {
-    console.error("Fetch admin profile error:", error);
-    throw error.response?.data || { message: error.message || "Failed to fetch admin profile" };
-  }
+/**
+ * ===============================
+ * ADMIN AUTH API
+ * ===============================
+ */
+const adminApi = {
+  /**
+   * Login Admin
+   */
+  async loginAdmin(payload) {
+    const res = await api.post("/login", payload);
+    return unwrap(res);
+  },
+
+  /**
+   * Get current admin profile (optional future use)
+   */
+  async getProfile() {
+    const res = await api.get("/profile");
+    return unwrap(res);
+  },
+
+  /**
+   * Logout Admin
+   */
+  logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("adminProfile");
+  },
 };
 
-export default {
-  loginAdmin,
-  verifyLoginCode,
-  fetchAdminProfile,
-};
+export default adminApi;

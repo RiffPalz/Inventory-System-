@@ -1,34 +1,40 @@
-// routes/productRoute.js
 import express from "express";
-import adminAuth from "../middleware/adminauth.js";
-import ProductController from "../controllers/productController.js";
-import upload from "../middleware/upload.js"; 
+import {
+  createProductController,
+  getProductController,
+  listProductsController,
+  updateProductController,
+  deleteProductController,
+} from "../controllers/productController.js"; // Ensure this filename is exactly productController.js
+import { verifyToken } from "../middleware/adminAuth.js"
+import { upload } from "../middleware/upload.js";
 
-const productRouter = express.Router();
+const router = express.Router();
 
-// Protect all product routes with adminAuth
-productRouter.use(adminAuth);
+/**
+ * Helper middleware: only run multer when request is multipart/form-data.
+ * If request is JSON (application/json) we skip multer so req.body stays populated.
+ */
+const optionalUploadSingle = (fieldName = "image") => (req, res, next) => {
+  const contentType = req.headers["content-type"] || "";
+  if (req.is && req.is("application/json")) return next();
+  if (contentType.startsWith("multipart/form-data")) {
+    return upload.single(fieldName)(req, res, next);
+  }
+  return next();
+};
 
-// Create product
-productRouter.post("/", ProductController.createProduct);
+// Create product — Protected: triggers Low Stock notification on creation
+router.post("/", verifyToken, optionalUploadSingle("image"), createProductController);
 
-// List products (supports pagination, search, filters)
-productRouter.get("/", ProductController.listProducts);
+// Public list & get
+router.get("/", listProductsController);
+router.get("/:id", getProductController);
 
-// Get single product by id
-productRouter.get("/:id", ProductController.getProductById);
+// Update product — Protected: triggers Low Stock notification on update
+router.put("/:id", verifyToken, optionalUploadSingle("image"), updateProductController);
 
-// Update product by id
-productRouter.put("/:id", ProductController.updateProduct);
+// Delete product — Protected
+router.delete("/:id", verifyToken, deleteProductController);
 
-// Delete product by id
-productRouter.delete("/:id", ProductController.deleteProduct);
-
-// UPLOAD IMAGES - NEW
-productRouter.post(
-  "/:id/images",
-  upload.array("images", 10),
-  ProductController.uploadImages
-);
-
-export default productRouter;
+export default router;

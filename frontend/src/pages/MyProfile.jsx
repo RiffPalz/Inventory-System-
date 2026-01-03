@@ -1,226 +1,351 @@
 import { useState, useRef, useEffect } from "react";
-import Sidebar from "../components/sidebar.jsx";
-import { Link, useNavigate } from "react-router-dom";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000"; // adjust if using env
+import { Link } from "react-router-dom";
+import adminApi from "../api/adminApi.js";
 
 export default function MyProfile() {
-  const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  const [username, setUsername] = useState("");
+  // FORM STATES
+  const [userName, setUserName] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState(""); // will be readOnly, populated from server
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [imagePreview, setImagePreview] = useState("");
+
+  // ORIGINAL SNAPSHOT (FOR CANCEL)
+  const [originalProfile, setOriginalProfile] = useState(null);
+
+  // UI STATES
+  const [isEditing, setIsEditing] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
 
-  const token = localStorage.getItem("token");
-
+  // FETCH PROFILE
   useEffect(() => {
-    // Fetch profile from backend
-    const fetchProfile = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/api/admin/profile`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+    const hydrateFromStorage = () => {
+      const stored = JSON.parse(localStorage.getItem("adminProfile") || "{}");
+
+      if (stored.username || stored.phone || stored.avatar) {
+        setUserName(stored.username || "");
+        setPhone(stored.phone || "");
+        setEmail(stored.email || "");
+        setImagePreview(stored.avatar || "");
+
+        setOriginalProfile({
+          userName: stored.username || "",
+          phone: stored.phone || "",
+          email: stored.email || "",
+          image: stored.avatar || "",
         });
-
-        const json = await res.json();
-        if (!res.ok) {
-          console.error("Failed to load profile:", json);
-          setMessage({ type: "error", text: json.message || "Failed to load profile" });
-          return;
-        }
-
-        const admin = json.data.admin;
-        // map backend fields to frontend
-        setUsername(admin.userName ?? "");
-        setPhone(admin.phoneNumber ?? "");
-        setEmail(admin.emailAddress ?? "");
-        // If admin has images saved as stringified array, you can set preview:
-        if (admin.images) {
-          try {
-            const imgs = typeof admin.images === "string" ? JSON.parse(admin.images) : admin.images;
-            if (Array.isArray(imgs) && imgs.length) setImagePreview(imgs[0]);
-          } catch (e) {
-            // ignore parse error
-          }
-        }
-      } catch (err) {
-        console.error("fetchProfile error:", err);
-        setMessage({ type: "error", text: "Failed to fetch profile" });
       }
     };
 
-    if (token) fetchProfile();
-    else {
-      // not authenticated — redirect to login
-      navigate("/login");
-    }
-  }, [token, navigate]);
+    const fetchProfile = async () => {
+      try {
+        const res = await adminApi.fetchAdminProfile();
+        if (!res || !res.admin) return;
 
-  useEffect(() => {
-    if (message) {
-      const t = setTimeout(() => setMessage(null), 3500);
-      return () => clearTimeout(t);
-    }
-  }, [message]);
+        const admin = res.admin;
+        const username = admin.userName ?? admin.username ?? admin.admin ?? "";
+        const phoneNumber = admin.phoneNumber ?? admin.phone ?? "";
+        const emailAddr = admin.emailAddress ?? admin.email ?? "";
 
-  const onSelectImage = (file) => {
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setImagePreview(url);
-  };
+        let avatar = "";
+        if (admin.images) {
+          try {
+            const imgs =
+              typeof admin.images === "string"
+                ? JSON.parse(admin.images)
+                : admin.images;
+            if (Array.isArray(imgs) && imgs.length) avatar = imgs[0];
+          } catch (e) {}
+        }
 
-  const handleFileChange = (e) => {
-    const f = e.target.files?.[0];
-    if (f) onSelectImage(f);
-  };
+        if (username) setUserName(username);
+        if (phoneNumber) setPhone(phoneNumber);
+        if (emailAddr) setEmail(emailAddr);
+        if (avatar) setImagePreview(avatar);
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    const f = e.dataTransfer.files?.[0];
-    if (f) onSelectImage(f);
-  };
-  const handleDragOver = (e) => e.preventDefault();
+        setOriginalProfile({
+          userName: username || userName,
+          phone: phoneNumber || phone,
+          email: emailAddr || email,
+          image: avatar || imagePreview,
+        });
+      } catch (err) {
+        console.warn("API failed, using localStorage only");
+      }
+    };
 
-  const handlePhoneChange = (e) => {
-    const raw = e.target.value.replace(/\D/g, "");
-    setPhone(raw.slice(0, 11));
-  };
+    hydrateFromStorage();
+    fetchProfile();
+  }, []);
 
-  const handleCancel = () => navigate("/dashboard");
-
+  // SAVE PROFILE
   const handleSave = async () => {
-    if (!username.trim() || !email.trim()) {
-      setMessage({ type: "error", text: "Please fill required fields." });
-      return;
-    }
-    if (phone.length !== 11) {
-      setMessage({ type: "error", text: "Phone must be exactly 11 digits." });
-      return;
-    }
-
+    setShowConfirm(false);
     setSaving(true);
+
     try {
-      const body = {
-        username: username.trim(),
-        phoneNumber: phone.trim(),
-      };
-      // only send password if user typed one (optional change)
-      if (password && password.length > 0) body.password = password;
+      const formData = new FormData();
+      formData.append("userName", userName.trim());
+      formData.append("phoneNumber", phone.trim());
+      if (password) formData.append("password", password);
+      if (selectedFile) formData.append("image", selectedFile);
 
-      const res = await fetch(`${API_BASE}/api/admin/profile`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+      // 1. Send Update to Server
+      const res = await adminApi.updateAdminProfile(formData);
 
-      const json = await res.json();
-      if (!res.ok) {
-        setMessage({ type: "error", text: json.message || "Failed to update profile." });
-        setSaving(false);
-        return;
+      // 2. Extract the relative path (/uploads/...) from the backend response
+      let finalPath = imagePreview;
+      if (res?.admin?.images) {
+        const imgs =
+          typeof res.admin.images === "string"
+            ? JSON.parse(res.admin.images)
+            : res.admin.images;
+        if (Array.isArray(imgs) && imgs.length) finalPath = imgs[0];
       }
 
-      // Update localStorage user (so other parts of frontend reflect the change)
-      const frontendUser = {
-        username: json.data.admin.userName ?? username,
-        phone: json.data.admin.phoneNumber ?? phone,
-        email: json.data.admin.emailAddress ?? email,
-        avatar: imagePreview || null,
-        role: json.data.admin.role ?? "admin",
-      };
-      localStorage.setItem("user", JSON.stringify(frontendUser));
+      // 3. Update localStorage with the server path, NOT the blob URL
+      const existing = JSON.parse(localStorage.getItem("adminProfile") || "{}");
+      localStorage.setItem(
+        "adminProfile",
+        JSON.stringify({
+          ...existing,
+          username: userName,
+          phone: phone,
+          avatar: finalPath,
+        })
+      );
 
-      setMessage({ type: "success", text: "Profile updated successfully." });
-      setTimeout(() => navigate("/dashboard"), 900);
+      // 4. Force state sync across Navbar
+      window.dispatchEvent(new Event("storage"));
+
+      setMessage({ type: "success", text: "Profile updated!" });
+      setIsEditing(false);
+      setSelectedFile(null);
     } catch (err) {
-      console.error("update profile error:", err);
-      setMessage({ type: "error", text: "Server error updating profile." });
+      setMessage({ type: "error", text: err.message });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <Sidebar />
-
-      <div className="flex-1 p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold">My Profile</h1>
-            <nav className="text-sm text-slate-500 mt-1">
-              <Link to="/dashboard" className="text-indigo-600 hover:underline">Dashboard</Link>
-              <span className="mx-1">/</span>
-              <span>My Profile</span>
-            </nav>
-          </div>
-
-          {message && (
-            <div className={`px-4 py-2 rounded-md text-sm ${message.type === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
-              {message.text}
+    <div className="p-10 bg-slate-50 min-h-screen">
+      {/* CONFIRM MODAL */}
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-black uppercase text-slate-800">
+              Save Changes?
+            </h3>
+            <p className="text-sm text-slate-500 mt-2">
+              This will update your account details.
+            </p>
+            <div className="flex gap-3 mt-8">
+              <button
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 py-3 text-slate-500 font-bold uppercase text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 transition text-white rounded-xl font-black uppercase text-xs"
+              >
+                Confirm
+              </button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
+
+      {/* HEADER */}
+      <div className="flex justify-between items-end mb-10">
+        <div>
+          <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tight">
+            Account Settings
+          </h1>
+          <nav className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+            <Link to="/dashboard" className="text-indigo-600">
+              Dashboard
+            </Link>{" "}
+            / My Profile
+          </nav>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Add Profile Image</label>
-
-            <div onDrop={handleDrop} onDragOver={handleDragOver}
-                 className="border-2 border-dashed border-slate-200 rounded-lg bg-white p-6 cursor-pointer"
-                 onClick={() => fileInputRef.current?.click()}>
-              {imagePreview ? (
-                <img src={imagePreview} alt="Profile Preview" className="w-56 h-56 object-cover rounded-md mx-auto" />
-              ) : (
-                <div className="flex flex-col items-center text-slate-500 py-10">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-14 w-14 mb-2" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></svg>
-                  <p>Drag & Drop Image or</p>
-                  <p className="text-indigo-600 font-medium cursor-pointer">Select</p>
-                </div>
-              )}
-
-              <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-            </div>
+        {message && (
+          <div
+            className={`px-5 py-3 rounded-xl text-xs font-bold ${
+              message.type === "success"
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-red-50 text-red-700"
+            }`}
+          >
+            {message.text}
           </div>
+        )}
+      </div>
 
-          <div className="lg:col-span-2 mt-6 lg:mt-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Username</label>
-                <input value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-300 rounded-md" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        {/* PROFILE IMAGE */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm">
+          <div
+            className={`relative w-full aspect-square rounded-2xl overflow-hidden flex items-center justify-center bg-slate-50 ${
+              isEditing ? "ring-2 ring-indigo-500 cursor-pointer" : ""
+            }`}
+            onClick={() => isEditing && fileInputRef.current.click()}
+          >
+            {imagePreview ? (
+              <img
+                src={
+                  imagePreview.startsWith("blob:")
+                    ? imagePreview
+                    : `${(import.meta.env.VITE_BACKEND_URL || "").replace(
+                        /\/$/,
+                        ""
+                      )}${
+                        imagePreview.startsWith("/") ? "" : "/"
+                      }${imagePreview}`
+                }
+                onError={(e) => {
+                  e.target.src = "/src/assets/logo.png";
+                }}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="text-slate-300 font-black text-sm uppercase">
+                No Image
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
-                <input value={phone} onChange={handlePhoneChange} className="w-full px-4 py-3 bg-white border border-slate-300 rounded-md" placeholder="09556978423" inputMode="numeric" maxLength={11} />
-                <p className="text-xs text-slate-500 mt-1">Phone must be exactly 11 digits.</p>
+            )}
+            {isEditing && (
+              <div className="absolute inset-0 bg-indigo-600/10 flex items-center justify-center text-indigo-600 font-bold text-[10px] uppercase">
+                Change Photo
               </div>
+            )}
+            <input
+              type="file"
+              ref={fileInputRef}
+              hidden
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  setSelectedFile(file);
+                  setImagePreview(URL.createObjectURL(file));
+                }
+              }}
+            />
+          </div>
+          <div className="mt-4 text-center">
+            <p className="text-xs font-bold text-slate-600 uppercase">
+              Profile Photo
+            </p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-tighter">
+              JPG or PNG • Max 5MB
+            </p>
+          </div>
+        </div>
 
+        {/* FORM */}
+        <div className="lg:col-span-2 space-y-8">
+          <div className="bg-white p-10 rounded-3xl shadow-sm space-y-8">
+            <div className="grid md:grid-cols-2 gap-8">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email (not editable)</label>
-                <input value={email} readOnly className="w-full px-4 py-3 bg-gray-100 border border-slate-300 rounded-md text-slate-600" />
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                  Username
+                </label>
+                <input
+                  disabled={!isEditing}
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  className={`w-full mt-2 px-5 py-3 rounded-xl font-semibold transition ${
+                    isEditing
+                      ? "bg-white ring-2 ring-indigo-500/30 focus:ring-indigo-500 outline-none"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Password (leave blank to keep current)</label>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" className="w-full px-4 py-3 bg-white border border-slate-300 rounded-md" />
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                  Phone Number
+                </label>
+                <input
+                  disabled={!isEditing}
+                  value={phone}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "");
+                    if (val.length <= 11) setPhone(val);
+                  }}
+                  className={`w-full mt-2 px-5 py-3 rounded-xl font-semibold transition ${
+                    isEditing
+                      ? "bg-white ring-2 ring-indigo-500/30 focus:ring-indigo-500 outline-none"
+                      : "bg-slate-100 text-slate-600"
+                  }`}
+                />
               </div>
             </div>
-
-            <div className="mt-8 flex justify-end gap-4">
-              <button onClick={handleCancel} className="px-6 py-2 rounded-md text-white shadow-md" style={{ backgroundColor: "#052f44" }}>Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="px-6 py-2 rounded-md text-white shadow-md" style={{ backgroundColor: "#f59e0b" }}>{saving ? "Saving..." : "Save Changes"}</button>
+            <div>
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                Active Email
+              </label>
+              <div className="mt-2 px-5 py-3 bg-slate-100 rounded-xl font-semibold text-slate-600">
+                {email}
+              </div>
             </div>
+            {isEditing && (
+              <div className="animate-in slide-in-from-top-2">
+                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Leave blank to keep current password"
+                  className="w-full mt-2 px-5 py-3 rounded-xl font-semibold bg-white ring-2 ring-indigo-500/30 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-4">
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-12 py-3 bg-indigo-600 hover:bg-indigo-700 transition text-white rounded-xl font-black uppercase text-xs shadow-lg shadow-indigo-200"
+              >
+                Edit Profile
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    if (originalProfile) {
+                      setUserName(originalProfile.userName);
+                      setPhone(originalProfile.phone);
+                      setImagePreview(originalProfile.image);
+                      setSelectedFile(null);
+                      setPassword("");
+                    }
+                    setIsEditing(false);
+                  }}
+                  className="px-8 py-3 text-slate-500 hover:text-slate-700 font-bold uppercase text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => setShowConfirm(true)}
+                  disabled={saving}
+                  className="px-12 py-3 bg-amber-500 hover:bg-amber-600 transition text-white rounded-xl font-black uppercase text-xs shadow-lg shadow-amber-200"
+                >
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
