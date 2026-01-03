@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { TrendingDown, History, Box, Lock, Printer } from "lucide-react";
+import { TrendingDown, History, Box, Lock, Printer, CheckCircle2, AlertCircle } from "lucide-react";
 import { listProducts } from "../api/productsApi.js";
 import { createSale, listSales } from "../api/salesApi.js";
 
@@ -9,6 +9,12 @@ export default function Sales() {
   const [maxAvailable, setMaxAvailable] = useState(0);
   const [salesHistory, setSalesHistory] = useState([]);
   const [showQtyWarning, setShowQtyWarning] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const [formData, setFormData] = useState({
     productId: "",
@@ -21,26 +27,36 @@ export default function Sales() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Updated to use defensive array checking
         const prodResult = await listProducts({ limit: 1000 });
-        const rawProducts = Array.isArray(prodResult?.data) ? prodResult.data : [];
-        
-        setProducts(
-          rawProducts.map((p) => ({
-            ...p,
-            id: p.id || p.ID || p._id, // Ensure consistent ID
-            inStock: Number(p.inStock) || 0,
-            price: Number(p.price) || 0,
-          }))
-        );
+        console.log("📦 Sales - prodResult:", prodResult);
+        console.log("📦 Sales - prodResult.data:", prodResult.data);
+
+        const prodData = prodResult.data || prodResult;
+        console.log("📦 Sales - prodData:", prodData);
+        console.log("📦 Sales - prodData.data:", prodData.data);
+
+        const rawProducts = Array.isArray(prodData.data) ? prodData.data : (Array.isArray(prodData) ? prodData : []);
+        console.log("📦 Sales - rawProducts length:", rawProducts.length);
+        console.log("📦 Sales - rawProducts:", rawProducts);
+
+        const mappedProducts = rawProducts.map((p) => ({
+          ...p,
+          id: p.id || p.ID || p._id,
+          inStock: Number(p.inStock) || 0,
+          price: Number(p.price) || 0,
+        }));
+
+        console.log("📦 Sales - mappedProducts:", mappedProducts);
+        console.log("📦 Sales - Setting products state with", mappedProducts.length, "products");
+        setProducts(mappedProducts);
 
         const historyData = await listSales();
-        // Check if historyData is an array or contains an array in .data
         const rawHistory = Array.isArray(historyData) ? historyData : (Array.isArray(historyData?.data) ? historyData.data : []);
         setSalesHistory(rawHistory);
-        
+
       } catch (err) {
         console.error("Sales fetch error:", err);
+        // Don't show error toast on initial load, just log it
       } finally {
         setLoading(false);
       }
@@ -79,7 +95,7 @@ export default function Sales() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.productId || !formData.quantity) {
-      alert("All fields are required");
+      showToast("All fields are required", "error");
       return;
     }
     if (Number(formData.quantity) > maxAvailable) {
@@ -95,6 +111,7 @@ export default function Sales() {
         transactionDate: formData.transactionDate,
       };
       const result = await createSale(payload);
+
       setSalesHistory((prev) => [result, ...prev]);
       setFormData({
         productId: "",
@@ -104,8 +121,9 @@ export default function Sales() {
       });
       setMaxAvailable(0);
       setShowQtyWarning(false);
+      showToast("Sale recorded successfully!", "success");
     } catch (err) {
-      alert(err.response?.data?.message || "Failed to record sale");
+      showToast(err.response?.data?.message || "Failed to record sale", "error");
     }
   };
 
@@ -270,30 +288,28 @@ export default function Sales() {
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div
-                          className={`font-bold text-[14px] ${
-                            isOutOfStock
-                              ? "text-red-500"
-                              : isLowStock
+                          className={`font-bold text-[14px] ${isOutOfStock
+                            ? "text-red-500"
+                            : isLowStock
                               ? "text-amber-500"
                               : "text-emerald-600"
-                          }`}
+                            }`}
                         >
                           {p.inStock}
                         </div>
                         <div
-                          className={`text-[9px] font-medium uppercase tracking-tight ${
-                            isOutOfStock
-                              ? "text-red-400"
-                              : isLowStock
+                          className={`text-[9px] font-medium uppercase tracking-tight ${isOutOfStock
+                            ? "text-red-400"
+                            : isLowStock
                               ? "text-amber-400"
                               : "text-slate-300"
-                          }`}
+                            }`}
                         >
                           {isOutOfStock
                             ? "Out of Stock"
                             : isLowStock
-                            ? "Low Stock"
-                            : "In Stock"}
+                              ? "Low Stock"
+                              : "In Stock"}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right font-semibold text-slate-700 text-[13px]">
@@ -366,6 +382,25 @@ export default function Sales() {
           </table>
         </div>
       </div>
+
+      {/* TOAST NOTIFICATION */}
+      {toast && (
+        <div className="fixed bottom-10 right-10 animate-in fade-in slide-in-from-bottom-4 duration-300 z-50">
+          <div
+            className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border ${toast.type === "success"
+              ? "bg-emerald-50 border-emerald-100 text-emerald-700"
+              : "bg-red-50 border-red-100 text-red-700"
+              }`}
+          >
+            {toast.type === "success" ? (
+              <CheckCircle2 size={20} />
+            ) : (
+              <AlertCircle size={20} />
+            )}
+            <span className="text-sm font-bold">{toast.message}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

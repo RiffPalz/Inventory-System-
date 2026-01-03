@@ -1,6 +1,6 @@
 import salesService from "../services/salesService.js";
 import { createNotification, createLowStockNotificationIfNeeded } from "../services/notificationService.js";
-import { io } from "../server.js"; 
+import { io } from "../server.js";
 import productService from "../services/productService.js";
 
 const createSale = async (req, res) => {
@@ -25,8 +25,8 @@ const createSale = async (req, res) => {
     io.to(`admin-${adminId}`).emit("new-notification", saleNotif);
 
     // 3. 📉 CHECK FOR LOW STOCK (After Sale)
-    const product = await productService.getProductById(sale.productID); 
-    
+    const product = await productService.getProductById(sale.productId);
+
     if (product) {
       const stockNotif = await createLowStockNotificationIfNeeded({
         adminId,

@@ -42,14 +42,15 @@ export default function Stocks() {
   /**
    * FETCH STOCKS: Uses normalized ID mapping to match your SQL database and Products.jsx
    */
- const fetchStocks = useCallback(async () => {
+  const fetchStocks = useCallback(async () => {
     setLoading(true);
     try {
       const res = await listProducts({ limit: 1000 });
-      
-      // Defensive check: Ensure res.data is an array
-      const rawData = Array.isArray(res?.data) ? res.data : [];
-      
+
+      // Axios wraps response in .data, backend returns { meta: {...}, data: [...] }
+      const apiData = res.data || res;
+      const rawData = Array.isArray(apiData.data) ? apiData.data : (Array.isArray(apiData) ? apiData : []);
+
       const normalized = rawData.map((p) => ({
         ...p,
         id: p.id || p.ID || p._id,
@@ -146,9 +147,8 @@ export default function Stocks() {
 
         <div className="flex items-center gap-4">
           <RefreshCw
-            className={`text-slate-300 cursor-pointer hover:text-blue-600 transition-all ${
-              loading ? "animate-spin" : ""
-            }`}
+            className={`text-slate-300 cursor-pointer hover:text-blue-600 transition-all ${loading ? "animate-spin" : ""
+              }`}
             size={20}
             onClick={fetchStocks}
           />
@@ -242,11 +242,10 @@ export default function Stocks() {
       {toast.show && (
         <div className="fixed bottom-8 right-8 animate-in fade-in slide-in-from-bottom-4 duration-300 z-50">
           <div
-            className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border ${
-              toast.type === "success"
+            className={`flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border ${toast.type === "success"
                 ? "bg-emerald-50 border-emerald-100 text-emerald-700"
                 : "bg-red-50 border-red-100 text-red-700"
-            }`}
+              }`}
           >
             {toast.type === "success" ? (
               <CheckCircle2 size={18} />
@@ -315,11 +314,10 @@ export default function Stocks() {
                         inStock: newInStore,
                       });
                     }}
-                    className={`w-full px-4 py-3 bg-slate-50 border rounded-xl font-bold text-slate-800 outline-none transition-all ${
-                      inputError
+                    className={`w-full px-4 py-3 bg-slate-50 border rounded-xl font-bold text-slate-800 outline-none transition-all ${inputError
                         ? "border-red-500 ring-2 ring-red-100"
                         : "border-slate-200 focus:border-blue-500"
-                    }`}
+                      }`}
                   />
                 </div>
               </div>

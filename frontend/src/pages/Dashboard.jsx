@@ -25,34 +25,45 @@ export default function Dashboard() {
   const [lowStockItems, setLowStockItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  const fetchDashboardData = async () => {
-  setLoading(true);
-  try {
-    const [prodRes, salesRes] = await Promise.all([
-      listProducts({ limit: 1000 }),
-      listSales(),
-    ]);
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        const [prodRes, salesRes] = await Promise.all([
+          listProducts({ limit: 1000 }),
+          listSales(),
+        ]);
 
-    // Use empty arrays [] if data is missing or unauthorized
-    const productList = Array.isArray(prodRes?.data) ? prodRes.data : [];
-    const salesList = Array.isArray(salesRes) ? salesRes : (Array.isArray(salesRes?.data) ? salesRes.data : []);
+        // Axios wraps in .data, backend returns { meta: {...}, data: [...] }
+        const prodData = prodRes.data || prodRes;
+        const productList = Array.isArray(prodData.data) ? prodData.data : (Array.isArray(prodData) ? prodData : []);
 
-    setStats({
-      totalProducts: productList.length,
-      totalSales: salesList.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0),
-      unitsSold: salesList.length,
-      lowStockCount: productList.filter(p => Number(p.inStock || 0) < 10).length,
-    });
-  } catch (err) {
-    console.error("Fetch Error:", err);
-  } finally {
-    setLoading(false);
-  }
-};
+        const salesData = salesRes.data || salesRes;
+        const salesList = Array.isArray(salesData.data) ? salesData.data : (Array.isArray(salesData) ? salesData : []);
 
-  fetchDashboardData();
-}, [navigate]);
+        // Get low stock items (inStock <= 10)
+        const lowStock = productList.filter(p => Number(p.inStock || 0) <= 10 && Number(p.inStock || 0) > 0);
+        setLowStockItems(lowStock);
+
+        // Get recent sales (last 5)
+        const recentSalesList = salesList.slice(0, 5);
+        setRecentSales(recentSalesList);
+
+        setStats({
+          totalProducts: productList.length,
+          totalSales: salesList.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0),
+          unitsSold: salesList.length,
+          lowStockCount: lowStock.length,
+        });
+      } catch (err) {
+        console.error("Fetch Error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [navigate]);
 
   const cardConfig = [
     {
