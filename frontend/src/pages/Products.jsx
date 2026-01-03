@@ -58,19 +58,34 @@ export default function Products() {
   const fetchProducts = useCallback(async () => {
     try {
       const res = await listProducts();
-      const rows = Array.isArray(res.data) ? res.data : [];
-      const normalized = rows.map((p) => ({
-        id: p.id ?? p.ID ?? p._id,
-        name: p.name,
-        sku: p.sku,
-        category: p.category,
-        stock: Number(p.stock ?? 0),
-        inStock: Number(p.inStock ?? 0),
-        price: Number(p.price ?? 0),
-        imageUrl: p.imageUrl ?? null,
-      }));
+      const apiData = res.data || res;
+      const rows = Array.isArray(apiData.data) ? apiData.data : (Array.isArray(apiData) ? apiData : []);
+
+      const backendUrl = (import.meta.env.VITE_BACKEND_URL || "http://localhost:3000").replace(/\/$/, "");
+
+      const normalized = rows.map((p) => {
+        let img = null;
+        if (p.imageUrl) img = p.imageUrl;
+        else if (p.images && p.images.length > 0) img = p.images[0];
+
+        if (img && !img.startsWith("http") && !img.startsWith("blob") && !img.startsWith("data")) {
+          img = `${backendUrl}${img.startsWith("/") ? img : "/" + img}`;
+        }
+
+        return {
+          id: p.id ?? p.ID ?? p._id,
+          name: p.name || "Unnamed Product",
+          sku: p.sku || "N/A",
+          category: p.category || "Uncategorized",
+          stock: Number(p.stock ?? 0),
+          inStock: Number(p.inStock ?? 0),
+          price: Number(p.price ?? 0),
+          imageUrl: img,
+        };
+      });
       setProducts(normalized);
     } catch (err) {
+      console.error("Products Load Error:", err);
       setProducts([]);
     }
   }, []);
@@ -232,9 +247,15 @@ export default function Products() {
                             src={p.imageUrl}
                             alt={p.name}
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
                           />
                         ) : (
                           <Box className="w-full h-full p-3 text-gray-200" />
+                        )}
+                        {p.imageUrl && (
+                          <Box className="w-full h-full p-3 text-gray-200" style={{ display: 'none' }} />
                         )}
                       </div>
                     </td>
@@ -471,11 +492,10 @@ function ProductModal({ initial, onClose, onSave }) {
                 type="number"
                 min="0"
                 max={stock}
-                className={`w-full bg-gray-50 border p-4 rounded-2xl outline-none font-bold transition-all focus:bg-white shadow-inner ${
-                  inStock >= stock && stock > 0
-                    ? "border-orange-200"
-                    : "border-gray-100"
-                }`}
+                className={`w-full bg-gray-50 border p-4 rounded-2xl outline-none font-bold transition-all focus:bg-white shadow-inner ${inStock >= stock && stock > 0
+                  ? "border-orange-200"
+                  : "border-gray-100"
+                  }`}
                 placeholder="0"
                 value={inStock === 0 ? "" : inStock}
                 onChange={(e) => {
