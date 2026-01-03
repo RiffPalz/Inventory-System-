@@ -1,532 +1,524 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import Navbar from "../components/Navbar.jsx";
-import Sidebar from "../components/sidebar.jsx";
-import { Box, Plus, Edit2, X, Image as ImageIcon } from "lucide-react";
-import { 
-  listProducts, 
-  createProduct, 
-  updateProduct, 
-  deleteProduct as deleteProductApi 
+import { useState, useEffect, useCallback } from "react";
+import {
+  Box,
+  Plus,
+  PencilLine,
+  Trash2,
+  AlertCircle,
+  CheckCircle2,
+  Filter,
+  Search,
+  X,
+  ChevronDown,
+} from "lucide-react";
+
+import {
+  listProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
 } from "../api/productsApi.js";
 
+/* ===============================
+   CONSTANTS & HELPERS
+================================ */
 const CATEGORIES = [
-  "PC Case",
-  "HDD",
+  "RAM",
   "SSD",
+  "HDD",
+  "PC Case",
   "Fan",
   "Cooler",
-  "RAM",
   "Motherboard",
   "Processor",
   "Graphics Card",
   "Power Supply Unit",
 ];
 
-const BACKEND = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
-
-function resolveImageUrl(src) {
-  if (!src || typeof src !== "string") return null;
-  if (src.startsWith("blob:") || src.startsWith("data:") || /^https?:\/\//i.test(src)) {
-    return src;
+const generateRandomSuffix = () => {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
+  for (let i = 0; i < 5; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return BACKEND ? `${BACKEND}${src}` : src;
-}
+  return result;
+};
 
-function EmptyRow() {
-  return (
-    <div className="py-8 text-center text-sm text-slate-500">
-      No products yet. Click <span className="font-semibold">Add Item</span> to create one.
-    </div>
-  );
-}
-
-function ProductRow({ p, onEdit, onDelete }) {
-  const statusClass =
-    p.inStock <= 0
-      ? "text-red-600"
-      : p.inStock <= 10
-      ? "text-yellow-600"
-      : "text-green-600";
-
-  const imgSrc = resolveImageUrl(p.imageUrl);
-
-  return (
-    <div className="grid grid-cols-12 items-center gap-4 py-4 px-6 border-t border-gray-100 text-center">
-      <div className="col-span-1 flex justify-center">
-        {imgSrc ? (
-          <img
-            src={imgSrc}
-            alt={p.name}
-            className="w-12 h-12 object-cover rounded-md mx-auto"
-          />
-        ) : (
-          <div className="w-12 h-12 bg-gray-100 rounded-md flex items-center justify-center text-gray-400 mx-auto">
-            <ImageIcon size={18} />
-          </div>
-        )}
-      </div>
-
-      <div className="col-span-2 flex flex-col justify-center">
-        <div className="text-sm font-semibold text-slate-800">{p.name}</div>
-      </div>
-
-      <div className="col-span-1 flex items-center justify-center text-sm text-slate-800">{p.sku}</div>
-
-      <div className="col-span-2 flex items-center justify-center">
-        <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-          {p.category}
-        </span>
-      </div>
-
-      <div className="col-span-1 flex items-center justify-center text-sm font-semibold text-slate-800">{p.stock}</div>
-
-      <div className="col-span-1 flex items-center justify-center text-sm font-semibold text-slate-800">{p.inStock}</div>
-
-      <div className="col-span-2 flex items-center justify-center text-sm text-gray-700">
-        ₱
-        {Number(p.price || 0).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}
-      </div>
-
-      <div className="col-span-1 flex items-center justify-center text-sm">
-        <span className={`${statusClass} font-semibold`}>
-          {p.inStock <= 0
-            ? "Out of stock"
-            : p.inStock <= 10
-            ? "Low stock"
-            : "In stock"}
-        </span>
-      </div>
-
-      <div className="col-span-1 flex justify-center gap-3 text-gray-500">
-        <button
-          onClick={() => onEdit(p)}
-          title="Edit"
-          className="hover:text-blue-600"
-        >
-          <Edit2 size={16} />
-        </button>
-        <button
-          onClick={() => onDelete(p)}
-          title="Delete"
-          className="hover:text-red-600"
-        >
-          <X size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
+/* ===============================
+   MAIN COMPONENT
+================================ */
 export default function Products() {
   const [products, setProducts] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [perPage, setPerPage] = useState(10);
-  const [filtered, setFiltered] = useState([]);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("All Categories");
+  const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  const [deleteCandidate, setDeleteCandidate] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-
-  const fetchProducts = useCallback(
-    async (limit = perPage) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await listProducts({ limit });
-        const normalized = (result.data || []).map((p) => ({
-          ...p,
-          imageUrl: p.imageUrl || (Array.isArray(p.images) && p.images.length ? p.images[0] : null),
-        }));
-        setProducts(normalized);
-        setFiltered(normalized);
-      } catch (err) {
-        setError(err.message || "Failed to fetch products.");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [perPage]
-  );
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await listProducts();
+      const rows = Array.isArray(res.data) ? res.data : [];
+      const normalized = rows.map((p) => ({
+        id: p.id ?? p.ID ?? p._id,
+        name: p.name,
+        sku: p.sku,
+        category: p.category,
+        stock: Number(p.stock ?? 0),
+        inStock: Number(p.inStock ?? 0),
+        price: Number(p.price ?? 0),
+        imageUrl: p.imageUrl ?? null,
+      }));
+      setProducts(normalized);
+    } catch (err) {
+      setProducts([]);
+    }
+  }, []);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
 
-  const openAddModal = () => {
-    setEditing(null);
-    setShowModal(true);
-  };
-
-  const openEditModal = (p) => {
-    setEditing(p);
-    setShowModal(true);
-  };
-
-  const requestDeleteProduct = (p) => setDeleteCandidate(p);
-
-  const confirmDeleteProduct = async () => {
-    if (!deleteCandidate) return;
-    setDeleting(true);
-    try {
-      await deleteProductApi(deleteCandidate.id);
-      setProducts((s) => s.filter((x) => x.id !== deleteCandidate.id));
-      setDeleteCandidate(null);
-    } catch (err) {
-      alert(`Delete failed: ${err?.message || err}`);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const cancelDelete = () => setDeleteCandidate(null);
-
-  const saveProduct = async (item, file) => {
-    try {
-      let updatedProduct;
-      if (item.id) updatedProduct = await updateProduct(item.id, item, file);
-      else updatedProduct = await createProduct(item, file);
-
-      updatedProduct = {
-        ...updatedProduct,
-        imageUrl: updatedProduct.imageUrl || (Array.isArray(updatedProduct.images) && updatedProduct.images[0]) || null,
-      };
-
-      setProducts((prev) => {
-        const idx = prev.findIndex((x) => x.id === updatedProduct.id);
-        if (idx !== -1) return prev.map((x) => (x.id === updatedProduct.id ? updatedProduct : x));
-        return [updatedProduct, ...prev];
-      });
-      setShowModal(false);
-    } catch (err) {
-      alert(`Error saving product: ${err?.message || err}`);
-    }
-  };
-
   useEffect(() => {
-    setFiltered(products);
-  }, [products]);
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const handleSave = async (payload, imageFile) => {
+    try {
+      if (payload.id) {
+        await updateProduct(payload.id, payload, imageFile);
+        setToast({ type: "success", msg: "Product updated successfully" });
+      } else {
+        await createProduct(payload, imageFile);
+        setToast({ type: "success", msg: "Product created successfully" });
+      }
+      setModalOpen(false);
+      setEditing(null);
+      fetchProducts();
+    } catch (err) {
+      setToast({ type: "error", msg: "Operation failed" });
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this product?")) return;
+    try {
+      await deleteProduct(id);
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      setToast({ type: "success", msg: "Product deleted" });
+    } catch (err) {
+      setToast({ type: "error", msg: "Delete failed" });
+    }
+  };
+
+  // The Search and Category Filter logic
+  const filtered = products.filter((p) => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.sku.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory =
+      categoryFilter === "All Categories" || p.category === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <Sidebar />
-      <div className="flex-1 p-4 sm:p-8 space-y-6">
-        <Navbar />
-
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3"><Box size={28} className="text-blue-500" />Products List ({products.length})</h2>
-
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-white rounded-md border px-3 py-2 text-center">
-              <label className="text-sm text-gray-600 mr-2">Show</label>
-              <select value={perPage} onChange={(e) => setPerPage(Number(e.target.value))} className="text-sm outline-none">
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
-              <label className="text-sm text-gray-600 ml-2">entries</label>
-            </div>
-
-            <button onClick={openAddModal} className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2.5 px-4 rounded-lg shadow-md">
-              <Plus size={16} /> Add Item
-            </button>
+    <div className="p-8 bg-[#f8fafc] min-h-screen font-sans">
+      {/* HEADER SECTION */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-xl shadow-inner">
+            <Box size={24} />
+          </div>
+          <div>
+            <h1 className="text-xl font-extrabold text-gray-800 tracking-tight">
+              Products Inventory
+            </h1>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+              {products.length} Items Listed
+            </p>
           </div>
         </div>
 
-        {error && <div className="text-center py-4 text-red-600 font-medium">{error}</div>}
-        {loading && !error && <div className="text-center py-4 text-gray-500">Loading products...</div>}
-
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-          <div className="grid grid-cols-12 bg-gray-50 text-xs font-semibold uppercase text-gray-500 tracking-wider py-3 px-6 border-b text-center">
-            <div className="col-span-1">Image</div>
-            <div className="col-span-2">Product Name</div>
-            <div className="col-span-1">SKU</div>
-            <div className="col-span-2">Category</div>
-            <div className="col-span-1">Stocks</div>
-            <div className="col-span-1">In Stock</div>
-            <div className="col-span-2">Price</div>
-            <div className="col-span-1">Status</div>
-            <div className="col-span-1">Action</div>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Category Filter */}
+          <div className="relative group">
+            <Filter
+              size={14}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors"
+            />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-400 appearance-none font-bold text-gray-600 transition-all cursor-pointer"
+            >
+              <option>All Categories</option>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={14}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+            />
           </div>
 
-          <div className="divide-y divide-gray-100">
-            {filtered.length === 0 && !loading && !error ? <EmptyRow /> : filtered.slice(0, perPage).map((p) => (
-              <ProductRow key={p.id} p={p} onEdit={openEditModal} onDelete={requestDeleteProduct} />
-            ))}
+          {/* Search Input with Clear Button */}
+          <div className="relative group">
+            <Search
+              size={14}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors"
+            />
+            <input
+              type="text"
+              placeholder="Search on this table"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 pr-10 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-400 w-64 font-medium transition-all"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-300 hover:text-gray-500 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
+
+          <button
+            onClick={() => {
+              setEditing(null);
+              setModalOpen(true);
+            }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-100 active:scale-95"
+          >
+            <Plus size={18} /> Add Item
+          </button>
         </div>
       </div>
 
-      {showModal && <AddEditModal onClose={() => setShowModal(false)} onSave={saveProduct} initial={editing} />}
+      {/* TABLE SECTION */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-gray-50 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+                <th className="px-6 py-5">Image</th>
+                <th className="px-6 py-5">Product Name</th>
+                <th className="px-6 py-5">SKU</th>
+                <th className="px-6 py-5 text-center">Category</th>
+                <th className="px-6 py-5 text-center">Stocks</th>
+                <th className="px-6 py-5 text-center">In Stock</th>
+                <th className="px-6 py-5">Price</th>
+                <th className="px-6 py-5 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50 text-sm">
+              {filtered.length > 0 ? (
+                filtered.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="hover:bg-gray-50/50 transition-colors group"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="w-12 h-12 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden shadow-sm">
+                        {p.imageUrl ? (
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <Box className="w-full h-full p-3 text-gray-200" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-gray-700">
+                      {p.name}
+                    </td>
+                    <td className="px-6 py-4 text-xs text-gray-400 font-mono uppercase tracking-tighter">
+                      {p.sku}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase bg-purple-50 text-purple-500 border border-purple-100">
+                        {p.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-center font-black text-gray-800">
+                      {p.stock}
+                    </td>
+                    <td className="px-6 py-4 text-center font-bold text-gray-500">
+                      {p.inStock}
+                    </td>
+                    <td className="px-6 py-4 font-black text-gray-800">
+                      ₱
+                      {p.price.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-center gap-3 opacity-100 lg:opacity-40 lg:group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            setEditing(p);
+                            setModalOpen(true);
+                          }}
+                          className="p-2 text-blue-400 hover:bg-blue-50 hover:text-blue-600 rounded-lg transition-all"
+                        >
+                          <PencilLine size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p.id)}
+                          className="p-2 text-red-300 hover:bg-red-50 hover:text-red-500 rounded-lg transition-all"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="8" className="px-6 py-20 text-center">
+                    <Search className="mx-auto mb-4 text-gray-100" size={48} />
+                    <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">
+                      No items found matching your search
+                    </p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      {deleteCandidate && (
-        <DeleteConfirmModal 
-            candidate={deleteCandidate} 
-            onCancel={cancelDelete} 
-            onConfirm={confirmDeleteProduct} 
-            isDeleting={deleting} 
+      {modalOpen && (
+        <ProductModal
+          initial={editing}
+          onClose={() => setModalOpen(false)}
+          onSave={handleSave}
         />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-4 rounded-2xl bg-white shadow-2xl border flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300">
+          {toast.type === "success" ? (
+            <CheckCircle2 className="text-green-500" size={20} />
+          ) : (
+            <AlertCircle className="text-red-500" size={20} />
+          )}
+          <span className="font-bold text-gray-700 text-sm">{toast.msg}</span>
+        </div>
       )}
     </div>
   );
 }
 
-
-// --- NEW DELETE MODAL COMPONENT ---
-
-function DeleteConfirmModal({ candidate, onCancel, onConfirm, isDeleting }) {
-    const [mounted, setMounted] = useState(false);
-
-    // Entry animation control
-    useEffect(() => {
-        setMounted(true);
-        return () => setMounted(false);
-    }, []);
-
-    const handleConfirm = () => {
-        setMounted(false); // Trigger exit animation
-        setTimeout(onConfirm, 300); // Wait for animation to finish
-    };
-
-    const handleCancel = () => {
-        setMounted(false); // Trigger exit animation
-        setTimeout(onCancel, 300); // Wait for animation to finish
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-            {/* 1. Backdrop with blur and opacity transition */}
-            <div 
-                className={`absolute inset-0 bg-black/40 transition-opacity duration-300 backdrop-blur-sm ${mounted ? 'opacity-100' : 'opacity-0'}`} 
-                onClick={handleCancel} 
-            />
-
-            {/* 2. Modal content with scale/opacity transition */}
-            <div 
-                className={`relative z-10 w-full max-w-md bg-white rounded-xl p-6 shadow-2xl transition-all duration-300 ease-in-out ${mounted ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-            >
-                <h3 className="text-lg font-semibold mb-2">Delete "{candidate.name}" ?</h3>
-                <p className="text-sm text-gray-600 mb-4">This action cannot be undone. The product will be permanently deleted.</p>
-
-                <div className="flex justify-end gap-3">
-                    <button type="button" onClick={handleCancel} className="px-4 py-2 rounded-md border" disabled={isDeleting}>Cancel</button>
-                    <button type="button" onClick={handleConfirm} className="px-4 py-2 rounded-md bg-red-600 text-white flex items-center gap-2" disabled={isDeleting}>
-                        {isDeleting ? <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg> : null}
-                        Delete
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-
-// --- ADD/EDIT MODAL ---
-function AddEditModal({ onClose, onSave, initial = null }) {
-  const [id] = useState(initial?.id ?? null);
+/* ===============================
+   MODAL COMPONENT
+================================ */
+function ProductModal({ initial, onClose, onSave }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [sku, setSku] = useState(initial?.sku ?? "");
   const [category, setCategory] = useState(initial?.category ?? CATEGORIES[0]);
+  const [sku, setSku] = useState(initial?.sku ?? "");
   const [stock, setStock] = useState(initial?.stock ?? 0);
   const [inStock, setInStock] = useState(initial?.inStock ?? 0);
   const [price, setPrice] = useState(initial?.price ?? 0);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(initial?.imageUrl ? resolveImageUrl(initial.imageUrl) : null);
-  const [errors, setErrors] = useState({});
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
-  const [mounted, setMounted] = useState(false); 
-
-  const inputRef = useRef(null);
-  const dropRef = useRef(null);
+  const [image, setImage] = useState(null);
+  const [preview, setPreview] = useState(initial?.imageUrl ?? null);
 
   useEffect(() => {
-      // Control modal mount/unmount animation
-      setMounted(true);
-      return () => setMounted(false);
-  }, []);
-
-  useEffect(() => {
-    if (!selectedImage) {
-      if (initial?.imageUrl) setPreviewUrl(resolveImageUrl(initial.imageUrl));
-      return;
+    if (!initial) {
+      const prefix = category.replace(/\s+/g, "").toUpperCase();
+      setSku(`${prefix}-${generateRandomSuffix()}`);
     }
-    const u = URL.createObjectURL(selectedImage);
-    setPreviewUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [selectedImage, initial]);
+  }, [category, initial]);
 
-  const validate = () => {
-    const e = {};
-    if (!name || !String(name).trim()) e.name = "Product name is required.";
-    if (!sku || !String(sku).trim()) e.sku = "SKU is required.";
-    if (!category) e.category = "Category is required.";
-    if (stock === "" || stock === null || isNaN(Number(stock))) e.stock = "Stock is required.";
-    if (inStock === "" || inStock === null || isNaN(Number(inStock))) e.inStock = "In stock is required.";
-    if (price === "" || price === null || isNaN(Number(price))) e.price = "Price is required.";
-    if (!previewUrl) e.image = "Product image is required.";
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const removeImage = () => {
-    if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
-    setSelectedImage(null);
-    setPreviewUrl(null);
-    if (inputRef.current) inputRef.current.value = "";
-  };
-
-  const resetForm = () => {
-    setName("");
-    setSku("");
-    setCategory(CATEGORIES[0]);
-    setStock(0);
-    setInStock(0);
-    setPrice(0);
-    removeImage();
-    setErrors({});
-  };
+  useEffect(() => {
+    if (inStock > stock) {
+      setInStock(stock);
+    }
+  }, [stock, inStock]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!validate()) return;
-    const item = { id, sku, name: name || "Untitled", category, stock: Number(stock) || 0, inStock: Number(inStock) || 0, price: Number(price) || 0 };
-    onSave(item, selectedImage);
+    onSave(
+      { id: initial?.id ?? null, name, sku, category, stock, inStock, price },
+      image
+    );
   };
-
-  const handleCancelClick = (e) => {
-    e?.stopPropagation();
-    setShowCancelConfirm(true);
-  };
-
-  const confirmCancel = (yes) => {
-    setShowCancelConfirm(false);
-    if (yes) resetAndClose();
-  };
-
-  const handleOverlayClick = () => setShowCancelConfirm(true);
-
-  function resetAndClose() {
-    resetForm();
-    setMounted(false); 
-    setTimeout(onClose, 300); 
-  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      {/* 1. Backdrop with blur and opacity transition */}
-      <div 
-        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 backdrop-blur-sm ${mounted ? 'opacity-100' : 'opacity-0'}`} 
-        onClick={handleOverlayClick} 
-      />
-      
-      {/* 2. Modal content with scale/opacity transition */}
-      <form
-        onSubmit={handleSubmit}
-        className={`relative z-10 w-full max-w-3xl bg-white rounded-xl p-6 shadow-2xl transition-all duration-300 ease-in-out ${mounted ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">{initial ? "Edit Product" : "Add Product"}</h3>
-          <button type="button" onClick={handleCancelClick} className="text-gray-500 hover:text-gray-700"><X size={18} /></button>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in duration-200">
+        <div className="px-10 py-8 border-b border-gray-50 flex justify-between items-center bg-[#fcfdfe]">
+          <div>
+            <h3 className="text-2xl font-black text-gray-800">
+              {initial ? "Edit Product" : "New Product"}
+            </h3>
+            <p className="text-sm font-medium text-gray-400 uppercase tracking-tighter">
+              Inventory Control Panel
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full text-gray-400 transition-colors"
+          >
+            <X size={24} />
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          
-          {/* Row 1: Product Name | SKU */}
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Product Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className={`w-full px-3 py-2 border rounded-md ${errors.name ? "border-red-400" : ""}`} />
-            {errors.name && <div className="text-xs text-red-500 mt-1">{errors.name}</div>}
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">SKU</label>
-            <input value={sku} disabled={!!id} onChange={(e) => setSku(e.target.value)} className={`w-full px-3 py-2 border rounded-md ${errors.sku ? "border-red-400" : ""}`} />
-            {errors.sku && <div className="text-xs text-red-500 mt-1">{errors.sku}</div>}
-          </div>
-          
-          {/* Row 2: Category | Stock (Warehouse) */}
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Category</label>
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className={`w-full px-3 py-2 border rounded-md ${errors.category ? "border-red-400" : ""}`}>
-              {CATEGORIES.map((c) => (<option key={c} value={c}>{c}</option>))}
-            </select>
-            {errors.category && <div className="text-xs text-red-500 mt-1">{errors.category}</div>}
-          </div>
-          <div>
-            <label className="block text-sm text-gray-600 mb-1">Stock (Warehouse)</label>
-            <input type="number" value={stock} onChange={(e) => setStock(e.target.value)} className={`w-full px-3 py-2 border rounded-md ${errors.stock ? "border-red-400" : ""}`} />
-            {errors.stock && <div className="text-xs text-red-500 mt-1">{errors.stock}</div>}
-          </div>
-
-          {/* Row 3: IN STOCK (col-span-1) | PRICE (col-span-1) */}
-          <div className="grid grid-cols-2 gap-4 col-span-2"> 
-            <div> 
-                <label className="block text-sm text-gray-600 mb-1">In Stock (Store)</label>
-                <input type="number" value={inStock} onChange={(e) => setInStock(e.target.value)} className={`w-full px-3 py-2 border rounded-md ${errors.inStock ? "border-red-400" : ""}`} />
-                {errors.inStock && (<div className="text-xs text-red-500 mt-1">{errors.inStock}</div>)}
-            </div>
-            <div> 
-                <label className="block text-sm text-gray-600 mb-1">Price</label>
-                <input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className={`w-full px-3 py-2 border rounded-md ${errors.price ? "border-red-400" : ""}`} />
-                {errors.price && (<div className="text-xs text-red-500 mt-1">{errors.price}</div>)}
-            </div>
-          </div>
-
-          {/* Row 4: Product Image (full width) */}
-          <div className="col-span-2">
-            <label className="block text-sm text-gray-600 mb-1">Product Image</label>
-
-            {/* Note: Simplified drag/drop handlers by moving logic inline to eliminate helper functions causing declaration conflicts */}
-            <div ref={dropRef} onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer?.files?.[0]; if (f) { const u = URL.createObjectURL(f); setPreviewUrl(u); setSelectedImage(f); } dropRef.current?.classList.remove("ring-2"); }} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); dropRef.current?.classList.add("ring-2"); }} onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); dropRef.current?.classList.remove("ring-2"); }} onClick={() => inputRef.current?.click()} className={`border border-dashed rounded-lg p-6 flex items-center justify-center cursor-pointer hover:border-gray-400 transition ${errors.image ? "border-red-400" : "border-gray-300"}`} style={{ width: 260, height: 180 }}>
-              {previewUrl ? (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  <img src={previewUrl} alt="preview" className="max-h-full max-w-full object-contain rounded-md" />
-                  <button type="button" onClick={(e) => { e.stopPropagation(); removeImage(); }} className="absolute top-2 right-2 bg-white rounded-full p-1 shadow text-red-500" title="Remove image">
-                    <X size={14} />
-                  </button>
-                </div>
-              ) : (
-                <div className="text-center text-gray-500">
-                  <div className="flex justify-center mb-2">
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                      <polyline points="7 10 12 15 17 10"></polyline>
-                      <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
+        <form onSubmit={handleSubmit} className="p-10 space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-3 text-center">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest block text-left ml-1">
+                Thumbnail
+              </label>
+              <div className="relative group w-full h-52 bg-gray-50 border-2 border-dashed border-gray-200 rounded-3xl flex items-center justify-center overflow-hidden hover:border-blue-400 transition-all cursor-pointer">
+                {preview ? (
+                  <img
+                    src={preview}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center px-4">
+                    <Box className="mx-auto mb-3 text-gray-200" size={48} />
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter italic">
+                      Drop image here
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-500">Drag & Drop Image here or <span className="text-blue-600 underline">Select</span></p>
-                </div>
-              )}
-              <input ref={inputRef} id="singleImageInput" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { const u = URL.createObjectURL(f); setPreviewUrl(u); setSelectedImage(f); } }} />
+                )}
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    if (e.target.files[0]) {
+                      setImage(e.target.files[0]);
+                      setPreview(URL.createObjectURL(e.target.files[0]));
+                    }
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                />
+              </div>
             </div>
 
-            {errors.image && <div className="text-xs text-red-500 mt-1">{errors.image}</div>}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 mt-6">
-          <button type="button" onClick={handleCancelClick} className="px-4 py-2 rounded-md border">Cancel</button>
-          <button type="submit" className="px-4 py-2 rounded-md bg-blue-600 text-white">Save</button>
-        </div>
-
-        {showCancelConfirm && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setShowCancelConfirm(false)} />
-            <div className="relative bg-white rounded-lg p-6 shadow-xl w-full max-w-sm z-30">
-              <h4 className="text-lg font-semibold mb-3">Are you sure you want to cancel?</h4>
-              <p className="text-sm text-gray-600 mb-4">Your changes will be lost.</p>
-              <div className="flex justify-end gap-3">
-                <button onClick={() => setShowCancelConfirm(false)} className="px-4 py-2 rounded-md border">No</button>
-                <button onClick={() => confirmCancel(true)} className="px-4 py-2 rounded-md bg-red-600 text-white">Yes</button>
+            <div className="space-y-5">
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">
+                  Product Name
+                </label>
+                <input
+                  className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl focus:bg-white outline-none font-semibold transition-all shadow-inner focus:ring-4 focus:ring-blue-500/5"
+                  placeholder="e.g. Samsung 980 Pro"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">
+                  SKU (Read Only)
+                </label>
+                <input
+                  className="w-full bg-gray-100 border border-gray-100 p-4 rounded-2xl outline-none font-mono text-gray-500 cursor-not-allowed opacity-70"
+                  value={sku}
+                  readOnly
+                />
               </div>
             </div>
           </div>
-        )}
-      </form>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="col-span-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">
+                Category
+              </label>
+              <select
+                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl outline-none font-bold text-gray-600 cursor-pointer focus:ring-4 focus:ring-blue-500/5 transition-all"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">
+                Total Stocks
+              </label>
+              <input
+                type="number"
+                min="0"
+                className="w-full bg-gray-50 border border-gray-100 p-4 rounded-2xl outline-none font-bold focus:bg-white transition-all shadow-inner"
+                placeholder="0"
+                value={stock === 0 ? "" : stock}
+                onChange={(e) => setStock(Math.max(0, Number(e.target.value)))}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">
+                In Stock
+              </label>
+              <input
+                type="number"
+                min="0"
+                max={stock}
+                className={`w-full bg-gray-50 border p-4 rounded-2xl outline-none font-bold transition-all focus:bg-white shadow-inner ${
+                  inStock >= stock && stock > 0
+                    ? "border-orange-200"
+                    : "border-gray-100"
+                }`}
+                placeholder="0"
+                value={inStock === 0 ? "" : inStock}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setInStock(val > stock ? stock : val);
+                }}
+              />
+            </div>
+          </div>
+
+          <div className="pt-6 flex items-center justify-between border-t border-gray-50">
+            <div className="relative">
+              <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-blue-300 text-lg">
+                ₱
+              </span>
+              <input
+                type="number"
+                min="0"
+                className="pl-10 pr-6 py-4 bg-blue-50/30 border border-blue-100 rounded-2xl outline-none font-black text-blue-600 w-52 text-xl"
+                placeholder="0.00"
+                value={price === 0 ? "" : price}
+                onChange={(e) => setPrice(Math.max(0, Number(e.target.value)))}
+              />
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-8 py-4 rounded-2xl font-extrabold text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black transition-all shadow-xl shadow-blue-100 active:scale-95"
+              >
+                {initial ? "Update Product" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

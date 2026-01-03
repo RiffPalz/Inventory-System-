@@ -1,13 +1,26 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import Logo from "../assets/images/logo.png";
-import { Home, Box, List, ChevronLeft, ChartNoAxesCombined } from "lucide-react";
+import {
+  Home,
+  Box,
+  Database,
+  List,
+  ChevronLeft,
+  ChartNoAxesCombined,
+} from "lucide-react";
 
 const menuItems = [
   { key: "dashboard", label: "Dashboard", icon: Home, path: "/dashboard" },
   { key: "products", label: "Products", icon: Box, path: "/products" },
+  { key: "stocks", label: "Stocks", icon: Database, path: "/stocks" },
   { key: "sales", label: "Sales", icon: List, path: "/sales" },
-  { key: "reports", label: "Reports", icon: ChartNoAxesCombined, path: "/reports" },
+  {
+    key: "reports",
+    label: "Reports",
+    icon: ChartNoAxesCombined,
+    path: "/reports",
+  },
 ];
 
 export default function Sidebar() {
@@ -15,15 +28,19 @@ export default function Sidebar() {
   const location = useLocation();
   const [activeItem, setActiveItem] = useState("dashboard");
 
-  // Update active item when URL changes
   useEffect(() => {
-    const found = menuItems.find((m) => location.pathname.startsWith(m.path));
+    // This logic ensures that /reports/monthly-sales still highlights the "Reports" tab
+    const found = menuItems.find(
+      (m) =>
+        location.pathname === m.path ||
+        (m.path !== "/dashboard" && location.pathname.startsWith(m.path))
+    );
     setActiveItem(found ? found.key : "dashboard");
   }, [location.pathname]);
 
   return (
     <aside
-      className={`transition-all duration-300 ease-in-out rounded-2xl overflow-hidden m-4 shadow-xl sticky top-4 self-start
+      className={`transition-all duration-500 ease-in-out rounded-2xl overflow-hidden m-4 shadow-2xl sticky top-4 self-start
       ${collapsed ? "w-20" : "w-64"}`}
       style={{
         backgroundColor: "#6b4bff",
@@ -33,46 +50,66 @@ export default function Sidebar() {
       }}
     >
       <div className="h-full flex flex-col text-white">
-
-        {/* Logo */}
-        <div className={`flex items-center justify-center flex-col px-4 ${collapsed ? "py-4" : "py-6"}`}>
-          {!collapsed ? (
-            <div className="flex flex-col items-center gap-3">
-              <img src={Logo} alt="Logo" className="h-12 w-12 object-contain" />
-              <div className="text-center px-2">
-                <div className="text-xl font-Lovelo font-bold tracking-wide">
-                  AXIS TECH SUPPLIES
+        {/* Logo Section */}
+        <div
+          className={`flex items-center justify-center flex-col px-4 transition-all duration-300 ${
+            collapsed ? "py-6" : "py-8"
+          }`}
+        >
+          <div className="flex flex-col items-center gap-3">
+            <img
+              src={Logo}
+              alt="Logo"
+              className={`object-contain transition-all duration-300 ${
+                collapsed ? "h-10 w-10" : "h-14 w-14"
+              }`}
+            />
+            {!collapsed && (
+              <div className="text-center animate-in fade-in zoom-in duration-300">
+                <div className="text-lg font-bold tracking-widest leading-tight">
+                  AXIS TECH
+                </div>
+                <div className="text-[10px] opacity-80 tracking-[0.3em] font-light">
+                  SUPPLIES
                 </div>
               </div>
-            </div>
-          ) : (
-            <img src={Logo} alt="Logo" className="h-10 w-10 object-contain" />
-          )}
+            )}
+          </div>
         </div>
 
-        {/* MENU */}
-        <nav>
-          <ul className="px-3 flex flex-col">
+        {/* Navigation Menu */}
+        <nav className="flex-1">
+          <ul className="px-3 flex flex-col gap-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = item.key === activeItem;
 
               return (
-                <li key={item.key} className="w-full my-1">
+                <li key={item.key} className="relative">
                   <Link
                     to={item.path}
-                    onClick={() => setActiveItem(item.key)}
-                    className={`flex items-center w-full px-3 py-3 rounded-xl transition-all
+                    className={`flex items-center w-full px-3 py-3.5 rounded-xl transition-all duration-200 group
                       ${collapsed ? "justify-center" : "gap-4 pl-5"}
-                      ${isActive ? "bg-white/20 shadow-lg" : "hover:bg-white/10"}
+                      ${
+                        isActive
+                          ? "bg-white text-[#6b4bff] shadow-lg"
+                          : "hover:bg-white/10 text-white/80 hover:text-white"
+                      }
                     `}
                   >
-                    <Icon size={22} />
-
+                    <Icon
+                      size={20}
+                      className={`transition-transform duration-300 group-hover:scale-110 ${
+                        isActive ? "text-[#6b4bff]" : ""
+                      }`}
+                    />
                     {!collapsed && (
-                      <span className="text-sm font-medium whitespace-nowrap">
+                      <span className="text-sm font-semibold tracking-wide whitespace-nowrap">
                         {item.label}
                       </span>
+                    )}
+                    {collapsed && isActive && (
+                      <div className="absolute right-2 w-1 h-1 bg-white rounded-full" />
                     )}
                   </Link>
                 </li>
@@ -81,15 +118,17 @@ export default function Sidebar() {
           </ul>
         </nav>
 
-        {/* COLLAPSE BUTTON */}
-        <div className="mt-auto px-4 py-6 flex justify-center border-t border-white/10">
+        {/* Collapse Toggle */}
+        <div className="px-4 py-6 flex justify-center">
           <button
             onClick={() => setCollapsed((prev) => !prev)}
-            className="h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"
+            className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
           >
             <ChevronLeft
-              size={20}
-              className={`transition-transform ${collapsed ? "rotate-180" : ""}`}
+              size={18}
+              className={`transition-transform duration-500 ${
+                collapsed ? "rotate-180" : ""
+              }`}
             />
           </button>
         </div>

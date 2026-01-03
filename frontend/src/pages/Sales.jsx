@@ -1,290 +1,370 @@
-import { useState, useEffect } from 'react';
-import Navbar from "../components/Navbar.jsx";
-import Sidebar from "../components/sidebar.jsx";
-import { TrendingDown, History } from "lucide-react";
+import { useState, useEffect } from "react";
+import { TrendingDown, History, Box, Lock, Printer } from "lucide-react";
 import { listProducts } from "../api/productsApi.js";
+import { createSale, listSales } from "../api/salesApi.js";
 
-export default function RecordSale() {
-  const [formData, setFormData] = useState({
-    product: '',
-    quantity: '',
-    salePrice: '',
-    transactionDate: new Date().toISOString().split('T')[0]
-  });
-  
+export default function Sales() {
   const [products, setProducts] = useState([]);
-  const [salesHistory, setSalesHistory] = useState([]);
-  const [maxAvailable, setMaxAvailable] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [maxAvailable, setMaxAvailable] = useState(0);
+  const [salesHistory, setSalesHistory] = useState([]);
+  const [showQtyWarning, setShowQtyWarning] = useState(false);
+
+  const [formData, setFormData] = useState({
+    productId: "",
+    quantity: "",
+    unitPrice: "",
+    transactionDate: new Date().toISOString().split("T")[0],
+  });
 
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchData = async () => {
       setLoading(true);
-      setError(null);
       try {
-        const result = await listProducts({ limit: 1000 });
-        setProducts(result.data || []);
+        // Updated to use defensive array checking
+        const prodResult = await listProducts({ limit: 1000 });
+        const rawProducts = Array.isArray(prodResult?.data) ? prodResult.data : [];
+        
+        setProducts(
+          rawProducts.map((p) => ({
+            ...p,
+            id: p.id || p.ID || p._id, // Ensure consistent ID
+            inStock: Number(p.inStock) || 0,
+            price: Number(p.price) || 0,
+          }))
+        );
+
+        const historyData = await listSales();
+        // Check if historyData is an array or contains an array in .data
+        const rawHistory = Array.isArray(historyData) ? historyData : (Array.isArray(historyData?.data) ? historyData.data : []);
+        setSalesHistory(rawHistory);
+        
       } catch (err) {
-        setError(err.message || "Failed to fetch products.");
+        console.error("Sales fetch error:", err);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchProducts();
+    fetchData();
   }, []);
 
+  const handlePrint = () => window.print();
+
   const handleProductChange = (e) => {
-    const productId = e.target.value;
-    setFormData({ ...formData, product: productId });
-    
-    const selectedProduct = products.find(p => p.id === productId);
-    if (selectedProduct) {
-      setMaxAvailable(selectedProduct.inStock || 0);
-      setFormData(prev => ({ 
-        ...prev, 
-        product: productId,
-        salePrice: selectedProduct.price || '' 
+    const productId = Number(e.target.value);
+    const selected = products.find((p) => p.id === productId);
+
+    if (!selected) {
+      setFormData((s) => ({
+        ...s,
+        productId: "",
+        quantity: "",
+        unitPrice: "",
       }));
-    } else {
       setMaxAvailable(0);
+      setShowQtyWarning(false);
+      return;
     }
+
+    setMaxAvailable(selected.inStock);
+    setShowQtyWarning(false);
+    setFormData((s) => ({
+      ...s,
+      productId,
+      unitPrice: selected.price,
+      quantity: "",
+    }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!formData.product) {
-      alert('Please select a product');
+    if (!formData.productId || !formData.quantity) {
+      alert("All fields are required");
       return;
     }
-    
-    if (!formData.quantity || formData.quantity <= 0) {
-      alert('Please enter a valid quantity');
-      return;
-    }
-    
     if (Number(formData.quantity) > maxAvailable) {
-      alert(`Quantity exceeds available stock (${maxAvailable})`);
+      setShowQtyWarning(true);
       return;
     }
-
-    if (!formData.salePrice || formData.salePrice <= 0) {
-      alert('Please enter a valid sale price');
-      return;
+    try {
+      const payload = {
+        invoiceNumber: `INV-${Date.now()}`,
+        productId: Number(formData.productId),
+        quantity: Number(formData.quantity),
+        price: Number(formData.unitPrice),
+        transactionDate: formData.transactionDate,
+      };
+      const result = await createSale(payload);
+      setSalesHistory((prev) => [result, ...prev]);
+      setFormData({
+        productId: "",
+        quantity: "",
+        unitPrice: "",
+        transactionDate: new Date().toISOString().split("T")[0],
+      });
+      setMaxAvailable(0);
+      setShowQtyWarning(false);
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to record sale");
     }
-    
-    const selectedProduct = products.find(p => p.id === formData.product);
-    
-    const saleRecord = {
-      id: Date.now(),
-      date: formData.transactionDate,
-      productId: formData.product,
-      productName: selectedProduct?.name || 'Unknown',
-      sku: selectedProduct?.sku || 'N/A',
-      quantity: Number(formData.quantity),
-      unitPrice: Number(formData.salePrice),
-      totalSale: Number(formData.quantity) * Number(formData.salePrice)
-    };
-    
-    console.log('Sale data:', saleRecord);
-    setSalesHistory(prev => [saleRecord, ...prev]);
-    alert('Sale recorded successfully!');
-    
-    setFormData({
-      product: '',
-      quantity: '',
-      salePrice: '',
-      transactionDate: new Date().toISOString().split('T')[0]
-    });
-    setMaxAvailable(0);
   };
+
+  const currentTotal =
+    Number(formData.quantity || 0) * Number(formData.unitPrice || 0);
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
-      <Sidebar />
-      <div className="flex-1 flex flex-col">
-        <Navbar />
-        <main className="flex-1 p-6 space-y-6">
-          {/* Record Sale Section */}
-          <div>
-            <div className="mb-4 flex items-center gap-2">
-              <TrendingDown size={24} className="text-red-500" />
-              <h1 className="text-xl font-bold text-gray-800">Record New Sale</h1>
-            </div>
-
-            <div className="bg-white rounded-lg shadow p-6">
-              {error && (
-                <div className="mb-3 p-2 bg-red-50 border border-red-200 text-red-600 rounded text-sm">
-                  {error}
-                </div>
-              )}
-
-              <form onSubmit={handleSubmit}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label className="block text-gray-700 font-medium mb-1 text-xs uppercase tracking-wide">
-                      Product
-                    </label>
-                    <select
-                      value={formData.product}
-                      onChange={handleProductChange}
-                      disabled={loading}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                    >
-                      <option value="">
-                        {loading ? 'Loading...' : 'Select a product'}
+    <div className="p-8 space-y-10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start print:hidden">
+        {/* RECORD SALE SECTION */}
+        <div className="lg:col-span-5">
+          <h1 className="flex items-center gap-2 text-[#1e293b] text-base font-semibold mb-4 tracking-tight">
+            <TrendingDown className="text-red-500 w-4 h-4" /> Record New Sale
+          </h1>
+          <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  Product
+                </label>
+                <select
+                  value={formData.productId}
+                  onChange={handleProductChange}
+                  disabled={loading}
+                  className="w-full mt-1.5 px-3 py-2 border border-gray-200 rounded-md bg-white text-sm outline-none focus:border-blue-300"
+                >
+                  <option value="">Select a product</option>
+                  {products
+                    .filter((p) => p.inStock > 0)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
                       </option>
-                      {products
-                        .filter(p => p.inStock > 0)
-                        .map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} - {product.sku} (Stock: {product.inStock})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
+                    ))}
+                </select>
+              </div>
 
-                  <div>
-                    <label className="block text-gray-700 font-medium mb-1 text-xs uppercase tracking-wide">
-                      Transaction Date
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.transactionDate}
-                      onChange={(e) => setFormData({ ...formData, transactionDate: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col h-full justify-between">
+                  <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.quantity}
+                    disabled={!formData.productId}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      if (val > maxAvailable) {
+                        setFormData({ ...formData, quantity: maxAvailable });
+                        setShowQtyWarning(true);
+                      } else {
+                        setFormData({ ...formData, quantity: e.target.value });
+                        setShowQtyWarning(false);
+                      }
+                    }}
+                    className="w-full mt-1.5 px-3 py-2 border border-gray-200 rounded-md text-sm outline-none focus:border-blue-300"
+                  />
+                  <div className="mt-1 ml-1 flex flex-col justify-start">
+                    <p className="text-[10px] text-slate-400">
+                      Available: {maxAvailable}
+                    </p>
+                    {showQtyWarning && (
+                      <p className="text-[10px] text-red-500">
+                        Max is {maxAvailable}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  <div>
-                    <label className="block text-gray-700 font-medium mb-1 text-xs uppercase tracking-wide">
-                      Quantity Sold
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.quantity}
-                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      min="1"
-                      max={maxAvailable}
-                      disabled={!formData.product}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Max: {maxAvailable}</p>
-                  </div>
+                <div className="flex flex-col h-full justify-start">
+                  <label className="text-[10px] font-semibold text-gray-400 uppercase flex items-center gap-1">
+                    Price <Lock size={10} className="text-gray-300" />
+                  </label>
+                  <input
+                    readOnly
+                    value={
+                      formData.unitPrice
+                        ? `₱${Number(formData.unitPrice).toLocaleString()}`
+                        : ""
+                    }
+                    className="w-full mt-1.5 px-3 py-2 border border-gray-100 rounded-md bg-gray-50/50 text-gray-600 font-medium text-sm outline-none"
+                  />
+                </div>
+              </div>
 
-                  <div>
-                    <label className="block text-gray-700 font-medium mb-1 text-xs uppercase tracking-wide">
-                      Sale Price (Unit)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.salePrice}
-                      onChange={(e) => setFormData({ ...formData, salePrice: e.target.value })}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      step="0.01"
-                      min="0"
-                      disabled={!formData.product}
-                    />
-                  </div>
+              <div>
+                <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+                  Transaction Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.transactionDate}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      transactionDate: e.target.value,
+                    })
+                  }
+                  className="w-full mt-1.5 px-3 py-2 border border-gray-200 rounded-md text-sm outline-none focus:border-blue-300"
+                />
+              </div>
 
-                  <div className="flex items-end">
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              <div className="pt-4 space-y-4 border-t border-gray-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Total Amount
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-bold text-slate-800">₱</span>
+                    <span className="text-xl font-bold text-slate-800">
+                      {currentTotal.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-[#5147e3] hover:bg-[#3f36d1] active:bg-[#372eb8] text-white text-sm font-semibold rounded-md transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.98] focus:ring-2 focus:ring-[#5147e3]/50 focus:outline-none"
+                >
+                  Complete Sale
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        {/* STOCK ITEMS SECTION */}
+        <div className="lg:col-span-7">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-[#1e293b] mb-4 tracking-tight">
+            <Box className="text-blue-500 w-4 h-4" /> Stock Items (
+            {products.length})
+          </h2>
+          <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50/50">
+                <tr className="text-[10px] text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                  <th className="px-6 py-3 text-left font-semibold">
+                    Name / SKU
+                  </th>
+                  <th className="px-6 py-3 text-center font-semibold">
+                    In Stock
+                  </th>
+                  <th className="px-6 py-3 text-right font-semibold">Price</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {products.map((p) => {
+                  const isOutOfStock = p.inStock <= 0;
+                  const isLowStock = p.inStock > 0 && p.inStock <= 10;
+                  return (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-gray-50/50 transition-colors"
                     >
-                      <span>+</span>
-                      Complete Sale
-                    </button>
-                  </div>
-                </div>
-
-                {formData.quantity && formData.salePrice && (
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-semibold text-gray-700">Total Amount:</span>
-                      <span className="text-lg font-bold text-blue-600">
-                        ₱{(Number(formData.quantity) * Number(formData.salePrice)).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </form>
-            </div>
-          </div>
-
-          {/* Sales History Section */}
-          <div>
-            <div className="mb-4 flex items-center gap-2">
-              <History size={24} className="text-red-500" />
-              <h2 className="text-xl font-bold text-gray-800">
-                Sales History ({salesHistory.length})
-              </h2>
-            </div>
-
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <div className="grid grid-cols-4 bg-gray-50 text-xs font-semibold uppercase text-gray-500 tracking-wider py-2 px-4 border-b">
-                <div>Date</div>
-                <div>Item</div>
-                <div className="text-center">QTY</div>
-                <div className="text-right">Total Sale</div>
-              </div>
-
-              <div className="divide-y divide-gray-100">
-                {salesHistory.length === 0 ? (
-                  <div className="py-6 text-center text-sm text-gray-500">
-                    No sales recorded yet.
-                  </div>
-                ) : (
-                  salesHistory.map((sale) => (
-                    <div key={sale.id} className="grid grid-cols-4 items-center gap-4 py-3 px-4 hover:bg-gray-50 transition-colors">
-                      <div className="text-xs text-gray-700">
-                        {new Date(sale.date).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
-                      </div>
-                      
-                      <div>
-                        <div className="text-sm font-semibold text-gray-800">{sale.productName}</div>
-                        <div className="text-xs text-gray-500">
-                          Unit: ₱{Number(sale.unitPrice).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
+                      <td className="px-6 py-4">
+                        <div className="font-semibold text-slate-700 text-[13px]">
+                          {p.name}
                         </div>
-                      </div>
-                      
-                      <div className="text-center">
-                        <span className={`text-sm font-semibold ${sale.quantity < 0 ? 'text-red-600' : 'text-gray-800'}`}>
-                          {sale.quantity}
-                        </span>
-                      </div>
-                      
-                      <div className="text-right">
-                        <span className={`text-base font-bold ${sale.totalSale < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                          ₱{Number(sale.totalSale).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          SKU: {p.sku}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <div
+                          className={`font-bold text-[14px] ${
+                            isOutOfStock
+                              ? "text-red-500"
+                              : isLowStock
+                              ? "text-amber-500"
+                              : "text-emerald-600"
+                          }`}
+                        >
+                          {p.inStock}
+                        </div>
+                        <div
+                          className={`text-[9px] font-medium uppercase tracking-tight ${
+                            isOutOfStock
+                              ? "text-red-400"
+                              : isLowStock
+                              ? "text-amber-400"
+                              : "text-slate-300"
+                          }`}
+                        >
+                          {isOutOfStock
+                            ? "Out of Stock"
+                            : isLowStock
+                            ? "Low Stock"
+                            : "In Stock"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-slate-700 text-[13px]">
+                        ₱{p.price.toLocaleString()}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </main>
+        </div>
+      </div>
+
+      {/* SALES HISTORY SECTION */}
+      <div className="pt-8 border-t border-gray-100 print:pt-0 print:border-none">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-[#1e293b] tracking-tight">
+            <History className="w-4 h-4 text-gray-500" /> Sales History
+          </h2>
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-5 py-2 bg-[#5147e3] hover:bg-[#3f36d1] active:bg-[#372eb8] text-white font-bold rounded-xl shadow-md shadow-indigo-200 transition-all active:scale-[0.98] focus:ring-2 focus:ring-[#5147e3]/50 focus:outline-none print:hidden text-sm"
+          >
+            <Printer size={18} /> Print Sales Report
+          </button>
+        </div>
+        <div className="bg-white rounded-lg border border-gray-100 shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50/50">
+              <tr className="text-[10px] text-gray-400 uppercase border-b border-gray-100 tracking-wider">
+                <th className="px-6 py-3 text-left font-semibold">Date</th>
+                <th className="px-6 py-3 text-left font-semibold">Item</th>
+                <th className="px-6 py-3 text-center font-semibold">Qty</th>
+                <th className="px-6 py-3 text-right font-semibold">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {salesHistory.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan="4"
+                    className="px-6 py-10 text-center text-slate-400 text-xs italic"
+                  >
+                    No transactions recorded yet
+                  </td>
+                </tr>
+              ) : (
+                salesHistory.map((s) => (
+                  <tr
+                    key={s.id}
+                    className="hover:bg-gray-50/50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-slate-500 text-[12px]">
+                      {new Date(s.transactionDate).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-700 text-[12px] uppercase">
+                      {s.productName}
+                    </td>
+                    <td className="px-6 py-4 text-center text-slate-600 text-[12px]">
+                      {s.quantity}
+                    </td>
+                    <td className="px-6 py-4 text-right font-bold text-slate-800 text-[12px]">
+                      ₱{Number(s.totalAmount).toLocaleString()}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

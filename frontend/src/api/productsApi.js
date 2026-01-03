@@ -3,134 +3,103 @@ import axios from "axios";
 const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
 
 const api = axios.create({
-  baseURL: backendUrl,
-  // NOTE: Default content type is application/json. We will override this for FormData requests.
-  headers: { "Content-Type": "application/json" },
+  baseURL: backendUrl,
 });
 
-// Request interceptor: attach Authorization header using adminAccessToken if present
+/**
+ * Global interceptor (works for JSON requests)
+ */
 api.interceptors.request.use(
-  (config) => {
-    try {
-      const token = localStorage.getItem("adminAccessToken");
-      if (token) {
-        config.headers = config.headers || {};
-        if (!config.headers.Authorization && !config.headers.authorization) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-      }
-    } catch (e) {
-      // ignore localStorage errors
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
+  (config) => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
 );
 
-// Helper to normalize errors
-const normalizeError = (err) => {
-  if (!err) return { message: "Unknown error" };
-  if (err.response && err.response.data) {
-    const d = err.response.data;
-    return { message: d.message || d.error || JSON.stringify(d) };
-  }
-  return { message: err.message || "Network error" };
+/**
+ * Explicit auth header helper
+ * (IMPORTANT for multipart/form-data requests)
+ */
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-// Helper to build FormData for requests that include an image file
+/**
+ * Build FormData safely
+ */
 const buildFormData = (item, imageFile) => {
-  const formData = new FormData();
-  
-  for (const key in item) {
-    // We only append non-null/non-undefined scalar values to FormData
-    if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'object') {
-      formData.append(key, item[key]);
-    }
-  }
-  
-  if (imageFile) {
-    // 'image' must match the field name used in the backend middleware (optionalUploadSingle("image"))
-    formData.append('image', imageFile);
-  }
-  return formData;
+  const formData = new FormData();
+
+  for (const key in item) {
+    if (item[key] !== undefined && item[key] !== null) {
+      formData.append(key, item[key]);
+    }
+  }
+
+  if (imageFile) {
+    formData.append("image", imageFile);
+  }
+
+  return formData;
 };
 
-const PRODUCT_API_ENDPOINT = "/api/products";
-
-// --- API Functions ---
+const ENDPOINT = "/api/products";
 
 /**
- * Lists products from the backend.
- * @param {object} opts - Query options (page, limit, search, category, etc.)
- * @returns {Promise<object>} - { meta, data: products[] }
+ * ===============================
+ * API FUNCTIONS
+ * ===============================
  */
-export const listProducts = async (opts = {}) => {
-  try {
-    const res = await api.get(PRODUCT_API_ENDPOINT, { params: opts });
-    return res.data;
-  } catch (err) {
-    throw normalizeError(err);
-  }
+
+// PUBLIC
+export const listProducts = (opts) =>
+  api.get(ENDPOINT, { 
+    params: opts,
+    headers: getAuthHeaders() // Add this line to ensure the token is sent
+  });
+
+// CREATE (Protected, multipart-safe)
+export const createProduct = (item, imageFile) => {
+  const data = buildFormData(item, imageFile);
+  return api.post(ENDPOINT, data, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
 };
 
-/**
- * Creates a new product.
- * @param {object} item - Product data (name, sku, stock, etc.)
- * @param {File | null} imageFile - The file object to upload.
- * @returns {Promise<object>} - The created product object.
- */
-export const createProduct = async (item, imageFile) => {
-  try {
-    const data = buildFormData(item, imageFile);
-    
-    // Override Content-Type header to ensure browser sets it correctly for multipart data
-    const res = await api.post(PRODUCT_API_ENDPOINT, data, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return res.data.product;
-  } catch (err) {
-    throw normalizeError(err);
-  }
+// UPDATE (Protected)
+export const updateProduct = (id, item, imageFile) => {
+  // JSON update (no image)
+  if (!imageFile) {
+    return api.put(`${ENDPOINT}/${id}`, item, {
+      headers: getAuthHeaders(),
+    });
+  }
+
+  // Multipart update (with image)
+  const data = buildFormData(item, imageFile);
+  return api.put(`${ENDPOINT}/${id}`, data, {
+    headers: {
+      ...getAuthHeaders(),
+    },
+  });
 };
 
-/**
- * Updates an existing product.
- * @param {string | number} id - The ID of the product to update.
- * @param {object} item - Product updates (name, sku, stock, etc.)
- * @param {File | null} imageFile - The new image file object (optional).
- * @returns {Promise<object>} - The updated product object.
- */
-export const updateProduct = async (id, item, imageFile) => {
-  try {
-    const data = buildFormData(item, imageFile);
-    
-    // Override Content-Type header for multipart data
-    const res = await api.put(`${PRODUCT_API_ENDPOINT}/${id}`, data, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-    return res.data.product;
-  } catch (err) {
-    throw normalizeError(err);
-  }
-};
-
-/**
- * Deletes a product.
- * @param {string | number} id - The ID of the product to delete.
- * @returns {Promise<object>} - Deletion response message.
- */
-export const deleteProduct = async (id) => {
-  try {
-    const res = await api.delete(`${PRODUCT_API_ENDPOINT}/${id}`);
-    return res.data;
-  } catch (err) {
-    throw normalizeError(err);
-  }
-};
+// DELETE (Protected)
+export const deleteProduct = (id) =>
+  api.delete(`${ENDPOINT}/${id}`, {
+    headers: getAuthHeaders(),
+  });
 
 export default {
-  listProducts,
-  createProduct,
-  updateProduct,
-  deleteProduct,
+  listProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
 };
