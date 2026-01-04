@@ -1,234 +1,304 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  TrendingUp,
+  ArrowLeft,
+  Download,
+  Search,
+  RefreshCw,
+  Calendar,
+  Layers,
+  CreditCard,
+  ChevronRight,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import Chart from "react-apexcharts";
-import { Printer, Calendar, TrendingUp, Package, History } from "lucide-react";
-import { getMonthlySalesSummary, getMonthlySalesList } from "../api/reports.js";
+
+// FIXED: Using listSales from salesApi as your primary data source
+import { listSales } from "../api/salesApi.js";
 
 export default function MonthlySales() {
+  const navigate = useNavigate();
   const today = new Date();
-  const currentYear = today.getFullYear();
+  const CURRENT_YEAR = today.getFullYear();
 
-  const [month, setMonth] = useState(today.getMonth() + 1);
-  const [year, setYear] = useState(currentYear);
-  const [summary, setSummary] = useState({
-    totalSalesValue: 0,
-    totalUnitsSold: 0,
-    transactionCount: 0,
-  });
   const [sales, setSales] = useState([]);
-
-  // DYNAMIC YEAR LOGIC: Strictly 2025 to Current Year
-  const years = useMemo(() => {
-    const startYear = 2025;
-    const arr = [];
-    for (let y = currentYear; y >= startYear; y--) {
-      arr.push(y);
-    }
-    return arr;
-  }, [currentYear]);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [year, setYear] = useState(CURRENT_YEAR);
+  const [month, setMonth] = useState("all");
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchSales = async () => {
+      setLoading(true);
       try {
-        const summaryRes = await getMonthlySalesSummary(month, year);
-        setSummary(summaryRes);
-
-        const listRes = await getMonthlySalesList(month, year);
-
-        // STRICT FILTER: Only show data exactly matching selected month and year
-        const filteredList = (listRes || []).filter((s) => {
-          const d = new Date(s.transactionDate);
-          return d.getMonth() + 1 === month && d.getFullYear() === year;
-        });
-
-        setSales(filteredList);
+        const res = await listSales();
+        const salesData = res.data || res;
+        const salesList = Array.isArray(salesData.data)
+          ? salesData.data
+          : Array.isArray(salesData)
+          ? salesData
+          : [];
+        setSales(salesList);
       } catch (err) {
-        console.error("Failed to load monthly sales:", err);
+        console.error("Failed to fetch sales logs:", err);
+      } finally {
+        setLoading(false);
       }
     };
-    fetchData();
-  }, [month, year]);
+    fetchSales();
+  }, []);
 
-  const chartOptions = {
-    chart: { toolbar: { show: false }, fontFamily: "Inter, sans-serif" },
-    colors: ["#5147e3"],
-    fill: {
-      type: "gradient",
-      gradient: {
-        shadeIntensity: 1,
-        opacityFrom: 0.45,
-        opacityTo: 0.05,
-        stops: [20, 100],
-      },
-    },
+  const filteredSales = useMemo(() => {
+    return sales.filter((s) => {
+      const date = new Date(s.transactionDate || s.createdAt);
+      const matchYear = date.getFullYear() === year;
+      const matchMonth = month === "all" ? true : date.getMonth() === month;
+      const matchSearch =
+        s.productName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.transactionId?.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchYear && matchMonth && matchSearch;
+    });
+  }, [sales, year, month, searchTerm]);
+
+  const totalRevenue = filteredSales.reduce(
+    (sum, s) => sum + (Number(s.totalAmount) || 0),
+    0
+  );
+  const unitsSold = filteredSales.reduce(
+    (sum, s) => sum + (Number(s.quantity) || 0),
+    0
+  );
+  const transactionCount = filteredSales.length;
+
+  /* ================= FIXED: barSeries DEFINITION ================= */
+  const monthlyTotals = useMemo(() => {
+    const totals = Array(12).fill(0);
+    sales.forEach((sale) => {
+      const date = new Date(sale.transactionDate || sale.createdAt);
+      if (date.getFullYear() === year) {
+        totals[date.getMonth()] += Number(sale.totalAmount) || 0;
+      }
+    });
+    return totals;
+  }, [sales, year]);
+
+  const barSeries = [{ name: "Revenue", data: monthlyTotals }];
+
+  const barOptions = {
+    chart: { type: "bar", toolbar: { show: false } },
+    plotOptions: { bar: { borderRadius: 6, columnWidth: "35%" } },
+    dataLabels: { enabled: false },
     xaxis: {
-      categories: sales.map((s) =>
-        new Date(s.transactionDate).toLocaleDateString()
-      ),
-      labels: { style: { colors: "#94a3b8", fontSize: "10px" } },
+      categories: [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ],
+      labels: { style: { colors: "#94a3b8", fontWeight: 600 } },
     },
-    yaxis: {
-      labels: {
-        formatter: (val) => `₱${val.toLocaleString()}`,
-        style: { colors: "#94a3b8", fontSize: "10px" },
-      },
-    },
-    stroke: { curve: "smooth", width: 3 },
+    yaxis: { labels: { formatter: (val) => `₱${val.toLocaleString()}` } },
+    colors: ["#4F46E5"],
+    tooltip: { y: { formatter: (val) => `₱${val.toLocaleString()}` } },
   };
 
-  const chartSeries = [
-    { name: "Revenue", data: sales.map((s) => Number(s.totalAmount)) },
-  ];
-
   return (
-    <main className="p-8 space-y-8">
-      {/* HEADER & FILTERS */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <History className="text-[#5147e3] w-5 h-5" /> Monthly Sales Log
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 font-medium">
-            Viewing:{" "}
-            {new Date(0, month - 1).toLocaleString("default", {
-              month: "long",
-            })}{" "}
-            {year}
-          </p>
+    <div className="p-6 lg:p-10 space-y-8 bg-[#f8fafc] min-h-screen">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-5">
+          <button
+            onClick={() => navigate("/reports")}
+            className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 transition-all active:scale-95"
+          >
+            <ArrowLeft size={18} className="text-slate-600" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight">
+              Monthly Sales Log
+            </h1>
+            <nav className="flex items-center gap-2 text-xs font-bold text-slate-400 mt-0.5">
+              <span>Reports</span>
+              <ChevronRight size={12} />
+              <span className="text-indigo-600">Sales History</span>
+            </nav>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3 print:hidden">
-          <div className="flex items-center bg-white border border-gray-200 rounded-lg px-2 shadow-sm">
-            <Calendar size={14} className="text-slate-400 ml-2" />
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              className="bg-transparent px-3 py-2 text-sm font-semibold outline-none text-slate-700 cursor-pointer"
-            >
-              {Array.from({ length: 12 }).map((_, i) => (
-                <option key={i} value={i + 1}>
-                  {new Date(0, i).toLocaleString("default", { month: "long" })}
-                </option>
-              ))}
-            </select>
-            <div className="h-4 w-px bg-gray-200 mx-1"></div>
+        <button 
+  onClick={() => window.print()}
+  className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 print:hidden"
+>
+  <Download size={16} />
+  Print Monthly Sales
+</button>
+      </div>
+
+      {/* KPI CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-start justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase text-slate-400 mb-1">
+              Total Revenue
+            </p>
+            <h2 className="text-3xl font-black text-slate-800">
+              ₱{totalRevenue.toLocaleString()}
+            </h2>
+          </div>
+          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
+            <CreditCard size={20} />
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-start justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase text-slate-400 mb-1">
+              Units Sold
+            </p>
+            <h2 className="text-3xl font-black text-slate-800">{unitsSold}</h2>
+          </div>
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+            <Layers size={20} />
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-start justify-between">
+          <div>
+            <p className="text-[11px] font-black uppercase text-slate-400 mb-1">
+              Transactions
+            </p>
+            <h2 className="text-3xl font-black text-slate-800">
+              {transactionCount}
+            </h2>
+          </div>
+          <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+            <Calendar size={20} />
+          </div>
+        </div>
+      </div>
+
+      {/* CHART */}
+      <div className="bg-white border border-slate-100 shadow-sm p-8">
+        <Chart
+          options={barOptions}
+          series={barSeries}
+          type="bar"
+          height={350}
+        />
+      </div>
+
+      {/* TABLE SECTION */}
+      <div className="bg-white border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-6 bg-slate-50/50 border-b border-slate-100 flex flex-col xl:flex-row gap-6 items-center justify-between">
+          <div className="relative w-full xl:w-96">
+            <Search
+              size={16}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by product or ID..."
+              className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-medium outline-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* THE NEW MONTH DROPDOWN */}
+            <div className="flex items-center bg-white border border-slate-200 rounded-2xl px-3 shadow-sm">
+              <select
+                value={month}
+                onChange={(e) =>
+                  setMonth(
+                    e.target.value === "all" ? "all" : Number(e.target.value)
+                  )
+                }
+                className="py-3 text-sm font-bold text-slate-700 outline-none cursor-pointer bg-transparent"
+              >
+                <option value="all">All Months</option>
+                {[
+                  "Jan",
+                  "Feb",
+                  "Mar",
+                  "Apr",
+                  "May",
+                  "Jun",
+                  "Jul",
+                  "Aug",
+                  "Sep",
+                  "Oct",
+                  "Nov",
+                  "Dec",
+                ].map((label, index) => (
+                  <option key={label} value={index}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <select
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="bg-transparent px-3 py-2 text-sm font-semibold outline-none text-slate-700 cursor-pointer"
+              className="px-4 py-3 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 outline-none"
             >
-              {years.map((y) => (
+              {[2025, 2026].map((y) => (
                 <option key={y} value={y}>
-                  {y}
+                  {y} 
                 </option>
               ))}
             </select>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 bg-[#5147e3] text-white rounded-lg text-xs font-bold shadow-sm active:scale-[0.98] transition-all"
-          >
-            <Printer size={14} /> Print Report
-          </button>
-        </div>
-      </div>
-
-      {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <div className="text-[10px] font-bold text-[#5147e3] uppercase tracking-wider flex items-center gap-2 mb-2">
-            <TrendingUp size={14} /> Total Revenue
-          </div>
-          <div className="text-2xl font-black text-slate-800">
-            ₱{summary.totalSalesValue.toLocaleString()}
-          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <div className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider flex items-center gap-2 mb-2">
-            <Package size={14} /> Units Sold
-          </div>
-          <div className="text-2xl font-black text-slate-800">
-            {summary.totalUnitsSold.toLocaleString()}
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-          <div className="text-[10px] font-bold text-blue-500 uppercase tracking-wider flex items-center gap-2 mb-2">
-            <History size={14} /> Transactions
-          </div>
-          <div className="text-2xl font-black text-slate-800">
-            {summary.transactionCount.toLocaleString()}
-          </div>
-        </div>
-      </div>
-
-      {/* PERFORMANCE TREND */}
-      <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-        <div className="text-[10px] font-bold text-slate-400 uppercase mb-6 tracking-widest">
-          Performance Trend
-        </div>
-        {sales.length > 0 ? (
-          <Chart
-            options={chartOptions}
-            series={chartSeries}
-            type="area"
-            height={300}
-          />
-        ) : (
-          <div className="h-[300px] flex items-center justify-center text-slate-300 italic text-sm border-2 border-dashed border-slate-50 rounded-lg">
-            No trend data for{" "}
-            {new Date(0, month - 1).toLocaleString("default", {
-              month: "long",
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* TRANSACTION LIST */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50/50 border-b border-gray-100">
-            <tr className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-              <th className="px-6 py-4 text-left">Date</th>
-              <th className="px-6 py-4 text-left">Product</th>
-              <th className="px-6 py-4 text-center">Qty</th>
-              <th className="px-6 py-4 text-right">Total Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {sales.length === 0 ? (
-              <tr>
-                <td
-                  colSpan="4"
-                  className="px-6 py-12 text-center text-slate-400 italic text-xs"
-                >
-                  No records found for this period.
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-white border-b border-slate-100 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
+                <th className="px-8 py-5">Date</th>
+                <th className="px-8 py-5">Reference</th>
+                <th className="px-8 py-5">Product</th>
+                <th className="px-8 py-5 text-center">Qty</th>
+                <th className="px-8 py-5 text-right">Amount</th>
               </tr>
-            ) : (
-              sales.map((s) => (
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {filteredSales.map((sale) => (
                 <tr
-                  key={s.id}
-                  className="hover:bg-gray-50/50 transition-colors"
+                  key={sale.id || sale.transactionId}
+                  className="hover:bg-slate-50/50 transition-colors"
                 >
-                  <td className="px-6 py-4 text-slate-500 font-medium">
-                    {new Date(s.transactionDate).toLocaleDateString()}
+                  <td className="px-8 py-5 text-sm font-bold text-slate-600">
+                    {new Date(
+                      sale.transactionDate || sale.createdAt
+                    ).toLocaleDateString()}
                   </td>
-                  <td className="px-6 py-4 font-bold text-slate-700 uppercase">
-                    {s.productName}
+                  <td className="px-8 py-5">
+                    <span className="font-mono text-[11px] font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md">
+                      #{sale.transactionId?.slice(-8)}
+                    </span>
                   </td>
-                  <td className="px-6 py-4 text-center text-slate-600 font-medium">
-                    {s.quantity}
+                  <td className="px-8 py-5 text-sm font-black text-slate-800 uppercase tracking-tight">
+                    {sale.productName}
                   </td>
-                  <td className="px-6 py-4 text-right font-black text-slate-900">
-                    ₱{Number(s.totalAmount).toLocaleString()}
+                  <td className="px-8 py-5 text-center font-bold text-slate-600">
+                    {sale.quantity}
+                  </td>
+                  <td className="px-8 py-5 text-right font-black text-slate-800 text-sm">
+                    ₱{Number(sale.totalAmount).toLocaleString()}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

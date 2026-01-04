@@ -81,14 +81,14 @@ export default function Dashboard() {
       color: "bg-red-50",
     },
     {
-      title: "Total Sales (30 Days)",
+      title: "Total Sales",
       value: `₱${stats.totalSales.toLocaleString()}`,
       icon: <TrendingUp size={20} className="text-emerald-500" />,
       path: "/reports",
       color: "bg-emerald-50",
     },
     {
-      title: "Units Sold (30 Days)",
+      title: "Units Sold",
       value: stats.unitsSold,
       icon: <ShoppingCart size={20} className="text-purple-500" />,
       path: "/sales",
