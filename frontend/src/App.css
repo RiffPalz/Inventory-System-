@@ -1,0 +1,46 @@
+html, body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+@media print {
+  /* Hide UI elements that shouldn't be on paper */
+  .print\:hidden, 
+  nav, 
+  sidebar, 
+  .filter-toolbar,
+  button {
+    display: none !important;
+  }
+
+  /* Reset margins for the printer */
+  body {
+    background: white !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Ensure the main container takes up full width */
+  main, .p-10 {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Professional Table Formatting */
+  table {
+    border: 1px solid #e2e8f0;
+    width: 100%;
+  }
+
+  th {
+    background-color: #f8fafc !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Avoid breaking a transaction row across two pages */
+  tr {
+    page-break-inside: avoid;
+  }
+}
