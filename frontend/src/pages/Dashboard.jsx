@@ -91,7 +91,7 @@ export default function Dashboard() {
       title: "Units Sold",
       value: stats.unitsSold,
       icon: <ShoppingCart size={20} className="text-purple-500" />,
-      path: "/sales",
+      path: "/reports",
       color: "bg-purple-50",
     },
   ];
